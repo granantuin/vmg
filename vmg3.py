@@ -56,7 +56,7 @@ else:
         if msg["type"] == "SET_COORDS":
             st.session_state["lat"] = msg["value"]["lat"]
             st.session_state["lon"] = msg["value"]["lon"]
-    st.query_params()  # trick to enable message passing
+    st.query_params  # trick to enable message passing
     st.session_state.callback = _set_coords
 
 if "lat" in st.session_state and "lon" in st.session_state:
@@ -108,6 +108,7 @@ if "lat" in st.session_state and "lon" in st.session_state:
             )
         ],
     ))
+
 
 
 
