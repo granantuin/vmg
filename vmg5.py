@@ -99,7 +99,7 @@ if st.session_state.tracking:
     components.html(html_code, height=220)
 
     # JS sends coordinates via postMessage → Streamlit receives below
-    msg = st.get_query_params
+    msg = st.query_params
 else:
     st.warning("Tracking stopped. Tap ▶️ **Start Tracking** to begin.")
     components.html("<script>stopTracking();</script>", height=0)
@@ -139,6 +139,7 @@ if len(st.session_state.data) > 0:
     
     csv = df.to_csv(index=False).encode("utf-8")
     st.download_button("💾 Download CSV Log", csv, "gps_log.csv", "text/csv")
+
 
 
 
