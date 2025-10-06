@@ -65,6 +65,52 @@ function start(){{
   tracking = true;
   navigator.geolocation.watchPosition((pos)=>{{
     const lat = pos.coords.latitude;
+    const lon = pos.coords.longitude;
+    const now = new Date();
+    let spd=0, brg=0, vmg=0, eta=0;
+    if(data.length>0){{
+      const last=data[data.length-1];
+      const dt=(now-last.jsTime)/1000;
+      if(dt>0){{
+        const dist=haversine(last.lat,last.lon,lat,lon);
+        spd = dist/dt*1.94384; // knots
+        brg = bearing(lat,lon,waypoint.lat,waypoint.lon);
+        const distWP = haversine(lat,lon,waypoint.lat,waypoint.lon);
+        vmg = spd*Math.cos((brg*Math.PI)/180);
+        eta = (distWP/(spd*0.5144))/60; // min
+      }}
+    }}
+    data.push({{time: now.toLocaleTimeString(), lat, lon, spd, brg, vmg, eta, jsTime: now}});
+    updateTable();
+  }},(err)=>{{
+    document.getElementById("status").innerText="❌ "+err.message;
+  }},{{enableHighAccuracy:true}});
+}}
+
+function stop(){{
+  tracking=false;
+  document.getElementById("status").innerText="⏹ Tracking stopped.";
+  const csv = "data:text/csv;charset=utf-8," + 
+              ["time,lat,lon,speed_knots,bearing,vmg,eta_min"].concat(
+                data.map(d=>[d.time,d.lat,d.lon,d.spd.toFixed(2),d.brg.toFixed(1),d.vmg.toFixed(2),d.eta.toFixed(1)].join(","))
+              ).join("\\n");
+  const link = document.createElement("a");
+  link.href = encodeURI(csv);
+  link.download = "gps_track.csv";
+  link.innerText="💾 Download CSV";
+  document.getElementById("table").appendChild(document.createElement("br"));
+  document.getElementById("table").appendChild(link);
+}}
+
+</script>
+
+<button onclick="start()" style="margin:5px;font-size:16px;">▶️ Start</button>
+<button onclick="stop()" style="margin:5px;font-size:16px;">⏹ Stop</button>
+"""
+
+components.html(html_code, height=500)
+
+
 
 
 
