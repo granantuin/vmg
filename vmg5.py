@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import streamlit.components.v1 as components
-import time
 
 st.set_page_config(page_title="📡 GPS Logger", layout="centered")
 
@@ -9,16 +8,14 @@ st.title("📡 Real-Time GPS Logger")
 st.markdown("""
 This app records your live GPS position every second.  
 Tap **Start Tracking** to begin and **Stop Tracking** to end.  
-When you stop, your recorded positions will stay visible and downloadable as a CSV.
+When you stop, you’ll still see your recorded positions and can download them as a CSV.
 """)
 
-# --- Session state initialization ---
+# --- Session state ---
 if "tracking" not in st.session_state:
     st.session_state.tracking = False
 if "data" not in st.session_state:
     st.session_state.data = []
-if "last_update" not in st.session_state:
-    st.session_state.last_update = 0
 
 # --- Buttons ---
 col1, col2 = st.columns(2)
@@ -29,9 +26,9 @@ with col2:
     if st.button("⏹ Stop Tracking"):
         st.session_state.tracking = False
 
-# --- JS to collect GPS data ---
 tracking = st.session_state.tracking
 
+# --- HTML + JS for geolocation tracking ---
 html_code = f"""
 <div id="gps-output" style="
     font-family: monospace;
@@ -42,16 +39,15 @@ html_code = f"""
     color: #222;
     border: 1px solid #ccc;
     margin-top: 10px;">
-  {("Tracking active..." if tracking else "Tracking stopped.")}
+  {'Tracking active...' if tracking else 'Tracking stopped.'}
 </div>
 
 <script>
-let tracking = {str(tracking).lower()};
 let watchId = null;
+let tracking = {str(tracking).lower()};
 
 function startTracking() {{
   const out = document.getElementById("gps-output");
-
   if (!navigator.geolocation) {{
     out.innerHTML = "❌ Geolocation not supported.";
     return;
@@ -70,8 +66,9 @@ function startTracking() {{
         `<b>Longitude:</b> ${{lon}}<br>` +
         `<b>Accuracy:</b> ±${{acc}} m`;
 
-      const query = new URLSearchParams({{lat, lon, acc, time}});
-      fetch(window.location.pathname + "?" + query.toString());
+      // Send data directly to Streamlit via postMessage
+      const payload = {{lat, lon, acc, time}};
+      window.parent.postMessage({type: "streamlit:setComponentValue", value: payload}, "*");
     }},
     (err) => {{
       out.innerHTML = "❌ " + err.message;
@@ -90,49 +87,39 @@ function stopTracking() {{
 
 if (tracking) {{
   startTracking();
-  setTimeout(() => window.location.reload(), 1000);
 }} else {{
   stopTracking();
 }}
 </script>
 """
 
-components.html(html_code, height=220)
+# --- Create component with real-time value ---
+value = components.html(html_code, height=220)
 
-# --- Capture GPS from URL query parameters ---
-params = st.query_params
-if "lat" in params:
-    try:
-        lat = float(params["lat"][0])
-        lon = float(params["lon"][0])
-        acc = float(params["acc"][0])
-        time_iso = params["time"][0]
+# --- Append incoming data to DataFrame ---
+if isinstance(value, dict) and "lat" in value:
+    st.session_state.data.append({
+        "time": value["time"],
+        "latitude": float(value["lat"]),
+        "longitude": float(value["lon"]),
+        "accuracy_m": float(value["acc"]),
+    })
 
-        # Avoid duplicate entries
-        if len(st.session_state.data) == 0 or st.session_state.data[-1]["time"] != time_iso:
-            st.session_state.data.append({
-                "time": time_iso,
-                "latitude": lat,
-                "longitude": lon,
-                "accuracy_m": acc,
-            })
-    except Exception:
-        pass
-
-# --- Display data after stopping or while tracking ---
+# --- Show the data (even after stop) ---
 if len(st.session_state.data) > 0:
-    st.subheader("📊 Recorded Positions")
     df = pd.DataFrame(st.session_state.data)
+    st.subheader("📊 Recorded Positions")
     st.dataframe(df.tail(10), use_container_width=True)
 
-    # CSV download
+    # Download CSV
     csv = df.to_csv(index=False).encode("utf-8")
     st.download_button("💾 Download CSV Log", csv, "gps_log.csv", "text/csv")
 
 if tracking:
     st.success("✅ Tracking active — updating every second...")
 else:
-    st.info("Tracking stopped. Tap ▶️ **Start Tracking** to resume.")
+    st.info("Tracking stopped. Tap ▶️ **Start Tracking** to begin again.")
+
 
 
 
