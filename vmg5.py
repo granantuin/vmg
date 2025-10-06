@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import streamlit.components.v1 as components
+import time
 
 st.set_page_config(page_title="📡 GPS Logger", layout="centered")
 
@@ -8,14 +9,16 @@ st.title("📡 Real-Time GPS Logger")
 st.markdown("""
 This app records your live GPS position every second.  
 Tap **Start Tracking** to begin and **Stop Tracking** to end.  
-When you stop, you’ll still see the recorded results and can **download them as CSV**.
+When you stop, your recorded positions will stay visible and downloadable as a CSV.
 """)
 
-# --- Session state ---
+# --- Session state initialization ---
 if "tracking" not in st.session_state:
     st.session_state.tracking = False
 if "data" not in st.session_state:
     st.session_state.data = []
+if "last_update" not in st.session_state:
+    st.session_state.last_update = 0
 
 # --- Buttons ---
 col1, col2 = st.columns(2)
@@ -26,9 +29,9 @@ with col2:
     if st.button("⏹ Stop Tracking"):
         st.session_state.tracking = False
 
+# --- JS to collect GPS data ---
 tracking = st.session_state.tracking
 
-# --- HTML/JS for GPS tracking ---
 html_code = f"""
 <div id="gps-output" style="
     font-family: monospace;
@@ -39,7 +42,7 @@ html_code = f"""
     color: #222;
     border: 1px solid #ccc;
     margin-top: 10px;">
-  Waiting for GPS data...
+  {("Tracking active..." if tracking else "Tracking stopped.")}
 </div>
 
 <script>
@@ -87,7 +90,7 @@ function stopTracking() {{
 
 if (tracking) {{
   startTracking();
-  setTimeout(() => window.location.reload(), 1000);  // Auto-refresh while tracking
+  setTimeout(() => window.location.reload(), 1000);
 }} else {{
   stopTracking();
 }}
@@ -96,34 +99,41 @@ if (tracking) {{
 
 components.html(html_code, height=220)
 
-# --- Capture data from URL parameters ---
+# --- Capture GPS from URL query parameters ---
 params = st.query_params
 if "lat" in params:
     try:
         lat = float(params["lat"][0])
         lon = float(params["lon"][0])
         acc = float(params["acc"][0])
-        time = params["time"][0]
-        if len(st.session_state.data) == 0 or st.session_state.data[-1]["time"] != time:
+        time_iso = params["time"][0]
+
+        # Avoid duplicate entries
+        if len(st.session_state.data) == 0 or st.session_state.data[-1]["time"] != time_iso:
             st.session_state.data.append({
-                "time": time,
+                "time": time_iso,
                 "latitude": lat,
                 "longitude": lon,
-                "accuracy_m": acc
+                "accuracy_m": acc,
             })
     except Exception:
         pass
 
-# --- Show results table ---
+# --- Display data after stopping or while tracking ---
 if len(st.session_state.data) > 0:
+    st.subheader("📊 Recorded Positions")
     df = pd.DataFrame(st.session_state.data)
-    st.subheader("📊 Logged Positions")
     st.dataframe(df.tail(10), use_container_width=True)
+
+    # CSV download
     csv = df.to_csv(index=False).encode("utf-8")
     st.download_button("💾 Download CSV Log", csv, "gps_log.csv", "text/csv")
 
-if not tracking:
-    st.info("Tracking stopped. Tap ▶️ **Start Tracking** to begin again.")
+if tracking:
+    st.success("✅ Tracking active — updating every second...")
+else:
+    st.info("Tracking stopped. Tap ▶️ **Start Tracking** to resume.")
+
 
 
 
