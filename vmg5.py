@@ -1,3 +1,29 @@
+import streamlit as st
+import pandas as pd
+import streamlit.components.v1 as components
+from datetime import datetime
+
+st.set_page_config(page_title="⛵ Real-Time Marine Tracker", layout="centered")
+
+st.title("⛵ Real-Time Marine Tracker")
+st.markdown("""
+Records and displays your GPS position every second (client-side).  
+Shows speed [knots], bearing, VMG, and ETA to waypoint.  
+When you stop, you can download the recorded log.
+""")
+
+# --- Fixed waypoint (Vilagarcía buoy example) ---
+WAYPOINT = {"lat": 42.5608, "lon": -8.9406}
+
+# --- Session state ---
+if "data" not in st.session_state:
+    st.session_state.data = []
+
+# --- Utility JS/HTML ---
+html_code = f"""
+<div id="status" style="background:#eef;padding:10px;border-radius:10px;margin-bottom:10px;font-family:monospace;"></div>
+<div id="table" style="font-family:monospace;font-size:14px;"></div>
+
 <script>
 let tracking = false;
 let data = [];
@@ -84,8 +110,11 @@ function stop(){
 </script>
 
 
+<button onclick="start()" style="margin:5px;font-size:16px;">▶️ Start</button>
+<button onclick="stop()" style="margin:5px;font-size:16px;">⏹ Stop</button>
+"""
 
-
+components.html(html_code, height=500)
 
 
 
