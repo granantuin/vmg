@@ -1,18 +1,21 @@
 import streamlit as st
-import pandas as pd
+import math
 import time
-import json
+import pandas as pd
 import streamlit.components.v1 as components
-from streamlit_autorefresh import st_autorefresh
 
-st.set_page_config(page_title="📡 GPS Logger", layout="centered")
+# --- Streamlit setup ---
+st.set_page_config(page_title="⛵ Real-Time Marine Tracker", layout="centered")
+st.title("⛵ Real-Time Marine Tracker")
 
-st.title("📡 Real-Time GPS Logger")
 st.markdown("""
-This app records your live GPS position every second.  
-Tap **Start Tracking** to begin and **Stop Tracking** to end.  
-When you stop, you’ll see your recorded positions and can download them as CSV.
+This app shows your GPS position, speed (knots), bearing, VMG,  
+and estimated time to reach a target waypoint.  
+Tap **Start Tracking** to begin and **Stop** to end.
 """)
+
+# --- Fixed waypoint (change this to your destination) ---
+WAYPOINT = {"lat": 42.5608, "lon": -8.9406}  # Example: Vilagarcía buoy
 
 # --- Session state ---
 if "tracking" not in st.session_state:
@@ -26,109 +29,114 @@ with col1:
     if st.button("▶️ Start Tracking"):
         st.session_state.tracking = True
 with col2:
-    if st.button("⏹ Stop Tracking"):
+    if st.button("⏹ Stop"):
         st.session_state.tracking = False
 
-tracking = st.session_state.tracking
+# --- Utility functions ---
+def haversine(lat1, lon1, lat2, lon2):
+    R = 6371000  # Earth radius in meters
+    φ1, φ2 = math.radians(lat1), math.radians(lat2)
+    Δφ, Δλ = math.radians(lat2 - lat1), math.radians(lon2 - lon1)
+    a = math.sin(Δφ/2)**2 + math.cos(φ1)*math.cos(φ2)*math.sin(Δλ/2)**2
+    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
-# --- Auto-refresh every second only when tracking ---
-if tracking:
-    st_autorefresh(interval=1000, key="gps_refresh")
+def bearing(lat1, lon1, lat2, lon2):
+    φ1, φ2 = math.radians(lat1), math.radians(lat2)
+    Δλ = math.radians(lon2 - lon1)
+    x = math.sin(Δλ) * math.cos(φ2)
+    y = math.cos(φ1)*math.sin(φ2) - math.sin(φ1)*math.cos(φ2)*math.cos(Δλ)
+    θ = math.atan2(x, y)
+    return (math.degrees(θ) + 360) % 360
 
-# --- Geolocation script (runs in browser) ---
-html_code = """
-<div id="gps-output" style="
-    font-family: monospace;
-    background-color: #f8f9fa;
-    padding: 12px;
-    border-radius: 10px;
-    font-size: 16px;
-    color: #222;
-    border: 1px solid #ccc;
-    margin-top: 10px;">
-  Waiting for GPS data...
-</div>
+# --- Main tracking ---
+if st.session_state.tracking:
+    st.success("✅ Tracking active — updating every second.")
+    st.markdown(f"**Waypoint:** {WAYPOINT['lat']:.5f}, {WAYPOINT['lon']:.5f}")
 
-<script>
-function updatePosition() {
-  if (!navigator.geolocation) {
-    document.getElementById("gps-output").innerHTML = "❌ Geolocation not supported.";
-    return;
-  }
+    html_code = """
+    <div id="gps-data" style="
+        font-family: monospace;
+        background-color: #eef;
+        padding: 15px;
+        border-radius: 10px;
+        font-size: 16px;">
+      Waiting for GPS data...
+    </div>
 
-  navigator.geolocation.getCurrentPosition(
-    (pos) => {
-      const lat = pos.coords.latitude.toFixed(6);
-      const lon = pos.coords.longitude.toFixed(6);
-      const acc = pos.coords.accuracy.toFixed(1);
-      const time = new Date().toISOString();
-      const payload = {lat, lon, acc, time};
-      window.localStorage.setItem("gps_data", JSON.stringify(payload));
+    <script>
+    let lastTime = null, lastLat = null, lastLon = null;
+    let watchId = null;
 
-      document.getElementById("gps-output").innerHTML =
-        `<b>Time:</b> ${new Date(time).toLocaleTimeString()}<br>` +
-        `<b>Latitude:</b> ${lat}<br>` +
-        `<b>Longitude:</b> ${lon}<br>` +
-        `<b>Accuracy:</b> ±${acc} m`;
+    function toRad(deg){ return deg * Math.PI / 180; }
+    function haversine(lat1, lon1, lat2, lon2){
+        const R = 6371000;
+        const φ1 = toRad(lat1), φ2 = toRad(lat2);
+        const Δφ = toRad(lat2-lat1), Δλ = toRad(lon2-lon1);
+        const a = Math.sin(Δφ/2)**2 + Math.cos(φ1)*Math.cos(φ2)*Math.sin(Δλ/2)**2;
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    }
+
+    watchId = navigator.geolocation.watchPosition((pos) => {
+        const lat = pos.coords.latitude;
+        const lon = pos.coords.longitude;
+        const time = pos.timestamp;
+
+        let speed = 0;
+        if (lastLat !== null){
+            const dt = (time - lastTime)/1000;
+            if (dt > 0){
+                const dist = haversine(lastLat, lastLon, lat, lon);
+                speed = dist / dt; // m/s
+            }
+        }
+
+        lastLat = lat;
+        lastLon = lon;
+        lastTime = time;
+
+        window.parent.postMessage({lat: lat, lon: lon, speed: speed}, "*");
+    }, 
+    (err) => { 
+        document.getElementById("gps-data").innerHTML = "❌ " + err.message; 
     },
-    (err) => {
-      document.getElementById("gps-output").innerHTML = "❌ " + err.message;
-    },
-    { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
-  );
-}
+    {enableHighAccuracy:true, maximumAge:0, timeout:5000});
+    </script>
+    """
+    components.html(html_code, height=180)
 
-updatePosition();
-</script>
-"""
+    # Placeholder for live data
+    placeholder = st.empty()
 
-components.html(html_code, height=200)
+    while st.session_state.tracking:
+        params = st.query_params
+        if "lat" in params and "lon" in params and "speed" in params:
+            lat = float(params["lat"][0])
+            lon = float(params["lon"][0])
+            speed_ms = float(params["speed"][0])
+            speed_knots = speed_ms * 1.94384  # 1 m/s = 1.94384 knots
 
-# --- Read from browser's localStorage (persistent JS → Streamlit bridge) ---
-gps_raw = st.experimental_get_query_params().get("gps_data", [None])[0]
+            brg = bearing(lat, lon, WAYPOINT["lat"], WAYPOINT["lon"])
+            dist = haversine(lat, lon, WAYPOINT["lat"], WAYPOINT["lon"])
+            vmg = speed_knots * math.cos(math.radians(brg))
+            ttr_min = dist / (speed_ms * 60) if speed_ms > 0 else None
 
-# Try to read latest location from localStorage using a hidden iframe trick
-# (works in browser after reload)
-components.html("""
-<script>
-const data = localStorage.getItem("gps_data");
-if (data) {
-  const url = new URL(window.location);
-  url.searchParams.set("gps_data", data);
-  window.history.replaceState({}, "", url);
-}
-</script>
-""", height=0)
+            # Display info
+            placeholder.markdown(f"""
+            **Time:** {time.strftime('%H:%M:%S')}  
+            **Latitude:** {lat:.5f}  
+            **Longitude:** {lon:.5f}  
+            **Speed:** {speed_knots:.2f} kn  
+            **Bearing to WP:** {brg:.1f}°  
+            **VMG:** {vmg:.2f} kn  
+            **ETA:** {ttr_min:.1f} min
+            """)
+        time.sleep(1)
+        st.experimental_rerun()
 
-# --- Process new position data ---
-if gps_raw:
-    try:
-        gps = json.loads(gps_raw)
-        lat, lon, acc, t = gps["lat"], gps["lon"], gps["acc"], gps["time"]
-
-        if len(st.session_state.data) == 0 or st.session_state.data[-1]["time"] != t:
-            st.session_state.data.append({
-                "time": t,
-                "latitude": float(lat),
-                "longitude": float(lon),
-                "accuracy_m": float(acc)
-            })
-    except Exception:
-        pass
-
-# --- Display results ---
-if len(st.session_state.data) > 0:
-    df = pd.DataFrame(st.session_state.data)
-    st.subheader("📊 Recorded Positions")
-    st.dataframe(df.tail(10), use_container_width=True)
-
-    csv = df.to_csv(index=False).encode("utf-8")
-    st.download_button("💾 Download CSV Log", csv, "gps_log.csv", "text/csv")
-
-if tracking:
-    st.success("✅ Tracking active — updating every second...")
 else:
-    st.info("Tracking stopped. Tap ▶️ **Start Tracking** to begin again.")
+    st.warning("Tracking stopped. Tap ▶️ **Start Tracking** to begin.")
+
+
 
 
 
