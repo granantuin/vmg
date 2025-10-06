@@ -3,35 +3,35 @@ import streamlit.components.v1 as components
 
 st.set_page_config(page_title="📡 GPS Tracker", layout="centered")
 
-st.title("📡 Real-Time GPS Tracker with VMG and ETA")
+st.title("📡 Real-Time GPS Tracker (1s updates)")
 st.markdown("""
-This app shows your **live position every second**, computing:
-- Velocity (knots)
+This app records your **position every second** and calculates:
+- Speed (knots)
 - Bearing to waypoint
 - VMG (Velocity Made Good)
-- ETA to waypoint (minutes)
+- ETA (minutes)
 
-Tap **Start Tracking** to begin and **Stop Tracking** to end.
+Tap **Start** to begin and **Stop** to finish.
 """)
 
-# --- HTML + JS GPS Tracker ---
 html_code = """
 <div id="status" style="font-weight:bold;color:#006400;margin-top:10px;">
   Waiting to start...
 </div>
 
 <div style="margin-top:10px;">
-  <button onclick="start()" style="background-color:#4CAF50;color:white;padding:10px 20px;border:none;border-radius:8px;">▶️ Start</button>
-  <button onclick="stop()" style="background-color:#d9534f;color:white;padding:10px 20px;border:none;border-radius:8px;">⏹ Stop</button>
+  <button onclick="startTracking()" style="background-color:#4CAF50;color:white;padding:10px 20px;border:none;border-radius:8px;">▶️ Start</button>
+  <button onclick="stopTracking()" style="background-color:#d9534f;color:white;padding:10px 20px;border:none;border-radius:8px;">⏹ Stop</button>
 </div>
 
 <div id="table" style="margin-top:15px;font-family:monospace;font-size:15px;"></div>
 
 <script>
+let intervalID = null;
 let tracking = false;
 let data = [];
 let lastPos = null;
-let waypoint = {lat:42.5608, lon:-8.9406};  // Example: Ría de Arousa waypoint
+let waypoint = {lat: 42.5608, lon: -8.9406};  // Example: Ría de Arousa
 
 function haversine(lat1, lon1, lat2, lon2){
   const R = 6371000;
@@ -59,14 +59,9 @@ function updateTable(){
   document.getElementById("table").innerHTML = html;
 }
 
-function start(){
-  if(!navigator.geolocation){
-    document.getElementById("status").innerText="❌ Geolocation not supported.";
-    return;
-  }
-  document.getElementById("status").innerText="✅ Tracking started...";
-  tracking = true;
-  navigator.geolocation.watchPosition((pos)=>{
+function recordPosition(){
+  if(!tracking) return;
+  navigator.geolocation.getCurrentPosition((pos)=>{
     const lat = pos.coords.latitude;
     const lon = pos.coords.longitude;
     const now = new Date();
@@ -75,14 +70,12 @@ function start(){
     if(lastPos){
       const dt = (now - lastPos.time)/1000;
       const dist = haversine(lastPos.lat,lastPos.lon,lat,lon);
-      if(dt>0 && dist>1){        // ignore <1 m noise
-        const speed_ms = dist/dt;
-        spd = speed_ms * 1.94384; // knots
-        brg = bearing(lat,lon,waypoint.lat,waypoint.lon);
-        const distWP = haversine(lat,lon,waypoint.lat,waypoint.lon);
-        vmg = spd * Math.cos((brg*Math.PI)/180);
-        eta = speed_ms>0 ? (distWP/(speed_ms*60)) : null; // minutes
-      }
+      const speed_ms = dist/dt;
+      spd = speed_ms * 1.94384; // knots
+      brg = bearing(lat,lon,waypoint.lat,waypoint.lon);
+      const distWP = haversine(lat,lon,waypoint.lat,waypoint.lon);
+      vmg = spd * Math.cos((brg*Math.PI)/180);
+      eta = speed_ms>0 ? (distWP/(speed_ms*60)) : null;
     }
     lastPos = {lat, lon, time: now};
     data.push({time: now.toLocaleTimeString(), lat, lon, spd, brg, vmg, eta});
@@ -92,8 +85,19 @@ function start(){
   },{enableHighAccuracy:true});
 }
 
-function stop(){
-  tracking=false;
+function startTracking(){
+  if(!navigator.geolocation){
+    document.getElementById("status").innerText="❌ Geolocation not supported.";
+    return;
+  }
+  document.getElementById("status").innerText="✅ Tracking started (1s interval)";
+  tracking = true;
+  intervalID = setInterval(recordPosition, 1000); // every second
+}
+
+function stopTracking(){
+  tracking = false;
+  clearInterval(intervalID);
   document.getElementById("status").innerText="⏹ Tracking stopped.";
   const csv = "data:text/csv;charset=utf-8," +
               ["time,lat,lon,speed_knots,bearing,vmg,eta_min"].concat(
@@ -114,7 +118,6 @@ function stop(){
 """
 
 components.html(html_code, height=600)
-
 
 
 
