@@ -5,11 +5,11 @@ st.set_page_config(page_title="📡 Real-Time GPS Tracker", layout="centered")
 
 st.title("📡 Real-Time GPS Tracker")
 st.markdown("""
-Use this app to track your live GPS position every second.  
+Track your GPS position every second directly from your smartphone.  
 Tap **Start Tracking** to begin and **Stop Tracking** to end.
 """)
 
-# --- Session State ---
+# --- Session state ---
 if "tracking" not in st.session_state:
     st.session_state.tracking = False
 
@@ -22,56 +22,70 @@ with col2:
     if st.button("⏹ Stop Tracking"):
         st.session_state.tracking = False
 
-# --- Tracking Logic ---
+# --- Active tracking ---
 if st.session_state.tracking:
-    st.success("✅ Tracking active — position updates every second.")
-    
+    st.success("✅ Tracking active — your position updates live below.")
+
     html_code = """
-    <div id="output" style="font-size:16px; color:#222; margin-top:10px; background:#f5f5f5; padding:10px; border-radius:10px;">
+    <div id="gps-output" style="
+        font-family: monospace;
+        background-color: #f0f0f0;
+        padding: 15px;
+        border-radius: 10px;
+        margin-top: 10px;
+        font-size: 16px;
+        color: #222;">
       Waiting for GPS data...
     </div>
+
     <script>
-    let watchID = null;
+    let watching = true;
+    let watchId = null;
 
-    function startWatch() {
-      const output = document.getElementById("output");
-      if (navigator.geolocation) {
-        watchID = navigator.geolocation.watchPosition(
-          (pos) => {
-            const lat = pos.coords.latitude.toFixed(6);
-            const lon = pos.coords.longitude.toFixed(6);
-            const acc = pos.coords.accuracy.toFixed(1);
-            const time = new Date().toLocaleTimeString();
-            output.innerHTML = `<b>Time:</b> ${time}<br>
-                                <b>Latitude:</b> ${lat}<br>
-                                <b>Longitude:</b> ${lon}<br>
-                                <b>Accuracy:</b> ±${acc} m`;
-          },
-          (err) => {
-            output.innerHTML = "❌ Error: " + err.message;
-          },
-          { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
-        );
-      } else {
-        output.innerHTML = "Geolocation not supported by this device.";
+    function startTracking() {
+      const out = document.getElementById("gps-output");
+
+      if (!navigator.geolocation) {
+        out.innerHTML = "❌ Geolocation is not supported by your device.";
+        return;
+      }
+
+      watchId = navigator.geolocation.watchPosition(
+        (pos) => {
+          const lat = pos.coords.latitude.toFixed(6);
+          const lon = pos.coords.longitude.toFixed(6);
+          const acc = pos.coords.accuracy.toFixed(1);
+          const time = new Date().toLocaleTimeString();
+          out.innerHTML = `
+            <b>Time:</b> ${time}<br>
+            <b>Latitude:</b> ${lat}<br>
+            <b>Longitude:</b> ${lon}<br>
+            <b>Accuracy:</b> ±${acc} m
+          `;
+        },
+        (err) => {
+          out.innerHTML = "❌ Error: " + err.message;
+        },
+        { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
+      );
+    }
+
+    function stopTracking() {
+      if (watchId !== null) {
+        navigator.geolocation.clearWatch(watchId);
+        watchId = null;
+        document.getElementById("gps-output").innerHTML = "<b>Tracking stopped.</b>";
       }
     }
 
-    function stopWatch() {
-      if (watchID !== null) {
-        navigator.geolocation.clearWatch(watchID);
-        watchID = null;
-        document.getElementById("output").innerHTML = "<b>Tracking stopped.</b>";
-      }
-    }
-
-    startWatch();
-
-    window.onbeforeunload = stopWatch;
+    if (watching) startTracking();
+    window.onbeforeunload = stopTracking;
     </script>
     """
     components.html(html_code, height=220)
+
 else:
-    st.warning("Tracking stopped. Tap ▶️ **Start Tracking** to begin.")
-    # Ensure JS watch stops
-    components.html("<script>if (watchID){navigator.geolocation.clearWatch(watchID);}</script>", height=0)
+    st.warning("Tracking is stopped. Tap ▶️ **Start Tracking** to begin.")
+    components.html("<script>stopTracking();</script>", height=0)
+
+
