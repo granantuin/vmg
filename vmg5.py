@@ -8,7 +8,7 @@ st.title("📡 Real-Time GPS Logger")
 st.markdown("""
 This app records your live GPS position every second.  
 Tap **Start Tracking** to begin and **Stop Tracking** to end.  
-You can download your logged positions as a CSV file.
+When you stop, you’ll still see the recorded results and can **download them as CSV**.
 """)
 
 # --- Session state ---
@@ -26,8 +26,10 @@ with col2:
     if st.button("⏹ Stop Tracking"):
         st.session_state.tracking = False
 
-# --- HTML GPS tracker ---
-html_code = """
+tracking = st.session_state.tracking
+
+# --- HTML/JS for GPS tracking ---
+html_code = f"""
 <div id="gps-output" style="
     font-family: monospace;
     background-color: #f8f9fa;
@@ -41,60 +43,60 @@ html_code = """
 </div>
 
 <script>
-let tracking = %s;
+let tracking = {str(tracking).lower()};
 let watchId = null;
 
-function startTracking() {
+function startTracking() {{
   const out = document.getElementById("gps-output");
 
-  if (!navigator.geolocation) {
+  if (!navigator.geolocation) {{
     out.innerHTML = "❌ Geolocation not supported.";
     return;
-  }
+  }}
 
   watchId = navigator.geolocation.watchPosition(
-    (pos) => {
+    (pos) => {{
       const lat = pos.coords.latitude.toFixed(6);
       const lon = pos.coords.longitude.toFixed(6);
       const acc = pos.coords.accuracy.toFixed(1);
       const time = new Date().toISOString();
+
       out.innerHTML =
-        `<b>Time:</b> ${new Date(time).toLocaleTimeString()}<br>` +
-        `<b>Latitude:</b> ${lat}<br>` +
-        `<b>Longitude:</b> ${lon}<br>` +
-        `<b>Accuracy:</b> ±${acc} m`;
+        `<b>Time:</b> ${{new Date(time).toLocaleTimeString()}}<br>` +
+        `<b>Latitude:</b> ${{lat}}<br>` +
+        `<b>Longitude:</b> ${{lon}}<br>` +
+        `<b>Accuracy:</b> ±${{acc}} m`;
 
-      // Send to Streamlit via URL
-      const query = new URLSearchParams({lat, lon, acc, time});
+      const query = new URLSearchParams({{lat, lon, acc, time}});
       fetch(window.location.pathname + "?" + query.toString());
-    },
-    (err) => {
+    }},
+    (err) => {{
       out.innerHTML = "❌ " + err.message;
-    },
-    { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
+    }},
+    {{ enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }}
   );
-}
+}}
 
-function stopTracking() {
-  if (watchId !== null) {
+function stopTracking() {{
+  if (watchId !== null) {{
     navigator.geolocation.clearWatch(watchId);
     watchId = null;
     document.getElementById("gps-output").innerHTML = "<b>Tracking stopped.</b>";
-  }
-}
+  }}
+}}
 
-if (tracking) startTracking(); else stopTracking();
-
-// Auto-refresh every second if tracking is active
-if (tracking) {
-  setTimeout(() => window.location.reload(), 1000);
-}
+if (tracking) {{
+  startTracking();
+  setTimeout(() => window.location.reload(), 1000);  // Auto-refresh while tracking
+}} else {{
+  stopTracking();
+}}
 </script>
-""" % ("true" if st.session_state.tracking else "false")
+"""
 
 components.html(html_code, height=220)
 
-# --- Capture GPS data ---
+# --- Capture data from URL parameters ---
 params = st.query_params
 if "lat" in params:
     try:
@@ -103,19 +105,25 @@ if "lat" in params:
         acc = float(params["acc"][0])
         time = params["time"][0]
         if len(st.session_state.data) == 0 or st.session_state.data[-1]["time"] != time:
-            st.session_state.data.append({"time": time, "latitude": lat, "longitude": lon, "accuracy_m": acc})
+            st.session_state.data.append({
+                "time": time,
+                "latitude": lat,
+                "longitude": lon,
+                "accuracy_m": acc
+            })
     except Exception:
         pass
 
-# --- Show results ---
+# --- Show results table ---
 if len(st.session_state.data) > 0:
     df = pd.DataFrame(st.session_state.data)
+    st.subheader("📊 Logged Positions")
     st.dataframe(df.tail(10), use_container_width=True)
     csv = df.to_csv(index=False).encode("utf-8")
     st.download_button("💾 Download CSV Log", csv, "gps_log.csv", "text/csv")
 
-if not st.session_state.tracking:
-    st.info("Tracking stopped. Tap ▶️ **Start Tracking** to begin.")
+if not tracking:
+    st.info("Tracking stopped. Tap ▶️ **Start Tracking** to begin again.")
 
 
 
