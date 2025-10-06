@@ -1,34 +1,37 @@
 import streamlit as st
-import pandas as pd
 import streamlit.components.v1 as components
-from datetime import datetime
 
-st.set_page_config(page_title="⛵ Real-Time Marine Tracker", layout="centered")
+st.set_page_config(page_title="📡 GPS Tracker", layout="centered")
 
-st.title("⛵ Real-Time Marine Tracker")
+st.title("📡 Real-Time GPS Tracker with VMG and ETA")
 st.markdown("""
-Records and displays your GPS position every second (client-side).  
-Shows speed [knots], bearing, VMG, and ETA to waypoint.  
-When you stop, you can download the recorded log.
+This app shows your **live position every second**, computing:
+- Velocity (knots)
+- Bearing to waypoint
+- VMG (Velocity Made Good)
+- ETA to waypoint (minutes)
+
+Tap **Start Tracking** to begin and **Stop Tracking** to end.
 """)
 
-# --- Fixed waypoint (Vilagarcía buoy example) ---
-WAYPOINT = {"lat": 42.5608, "lon": -8.9406}
+# --- HTML + JS GPS Tracker ---
+html_code = """
+<div id="status" style="font-weight:bold;color:#006400;margin-top:10px;">
+  Waiting to start...
+</div>
 
-# --- Session state ---
-if "data" not in st.session_state:
-    st.session_state.data = []
+<div style="margin-top:10px;">
+  <button onclick="start()" style="background-color:#4CAF50;color:white;padding:10px 20px;border:none;border-radius:8px;">▶️ Start</button>
+  <button onclick="stop()" style="background-color:#d9534f;color:white;padding:10px 20px;border:none;border-radius:8px;">⏹ Stop</button>
+</div>
 
-# --- Utility JS/HTML ---
-html_code = f"""
-<div id="status" style="background:#eef;padding:10px;border-radius:10px;margin-bottom:10px;font-family:monospace;"></div>
-<div id="table" style="font-family:monospace;font-size:14px;"></div>
+<div id="table" style="margin-top:15px;font-family:monospace;font-size:15px;"></div>
 
 <script>
 let tracking = false;
 let data = [];
 let lastPos = null;
-let waypoint = {lat:42.5608, lon:-8.9406};
+let waypoint = {lat:42.5608, lon:-8.9406};  // Example: Ría de Arousa waypoint
 
 function haversine(lat1, lon1, lat2, lon2){
   const R = 6371000;
@@ -72,7 +75,7 @@ function start(){
     if(lastPos){
       const dt = (now - lastPos.time)/1000;
       const dist = haversine(lastPos.lat,lastPos.lon,lat,lon);
-      if(dt>0 && dist>1){        // ignore <1 m movement noise
+      if(dt>0 && dist>1){        // ignore <1 m noise
         const speed_ms = dist/dt;
         spd = speed_ms * 1.94384; // knots
         brg = bearing(lat,lon,waypoint.lat,waypoint.lon);
@@ -108,13 +111,10 @@ function stop(){
   document.getElementById("table").appendChild(link);
 }
 </script>
-
-
-<button onclick="start()" style="margin:5px;font-size:16px;">▶️ Start</button>
-<button onclick="stop()" style="margin:5px;font-size:16px;">⏹ Stop</button>
 """
 
-components.html(html_code, height=500)
+components.html(html_code, height=600)
+
 
 
 
