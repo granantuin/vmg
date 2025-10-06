@@ -124,7 +124,7 @@ window.addEventListener("message", (event) => {
 components.html(js_code, height=0)
 
 # --- Capture data from URL parameters ---
-params = st.get_query_params
+params = st.query_params
 if "lat" in params:
     lat = float(params["lat"][0])
     lon = float(params["lon"][0])
@@ -139,6 +139,7 @@ if len(st.session_state.data) > 0:
     
     csv = df.to_csv(index=False).encode("utf-8")
     st.download_button("💾 Download CSV Log", csv, "gps_log.csv", "text/csv")
+
 
 
 
