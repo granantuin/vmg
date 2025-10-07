@@ -143,6 +143,17 @@ if len(st.session_state.data) > 1:
         for i in range(len(df))
     ]
 
+    # After computing df and before showing dataframe:
+    latest = df.iloc[-1]
+    st.markdown(f"""
+    <div style="background:#eef; padding:10px; border-radius:10px; font-family:monospace;">
+    <b>Last Fix:</b> {latest['time'].strftime('%H:%M:%S')}<br>
+    Lat: {latest['lat']:.6f} | Lon: {latest['lon']:.6f} | ±{latest['acc']:.1f} m<br>
+    Speed: {latest['speed_kn']:.2f} kn | Bearing→WP: {latest['bearing_wp']:.1f}°<br>
+    VMG: {latest['vmg_kn']:.2f} kn | ETA: {latest['eta_min'] if latest['eta_min'] else '—'} min
+    </div>
+    """, unsafe_allow_html=True)
+    
     st.subheader(f"📊 Live Data — Target: {waypoint_name}")
     st.dataframe(df[["time", "lat", "lon", "acc", "speed_kn", "bearing_wp", "vmg_kn", "eta_min"]].tail(10),
                  use_container_width=True)
@@ -154,6 +165,7 @@ elif st.session_state.tracking:
     st.info("⏳ Waiting for accurate GPS fix (≤ 50 m)...")
 else:
     st.warning("Tracking stopped. Tap ▶️ Start Tracking to begin.")
+
 
 
 
