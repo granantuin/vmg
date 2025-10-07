@@ -75,7 +75,7 @@ if st.session_state.tracking:
           watchId = navigator.geolocation.watchPosition(
             (pos) => {
               const acc = pos.coords.accuracy;
-              if (acc > 20) return; // only update if accuracy ≤ 20 m
+              if (acc > 50) return; // only update if accuracy ≤ 20 m
               const lat = pos.coords.latitude.toFixed(6);
               const lon = pos.coords.longitude.toFixed(6);
               const time = new Date().toISOString();
@@ -157,6 +157,7 @@ elif st.session_state.tracking:
     st.info("⏳ Waiting for accurate GPS fix (≤ 20 m)...")
 else:
     st.warning("Tracking stopped. Tap ▶️ **Start Tracking** to begin.")
+
 
 
 
