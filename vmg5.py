@@ -3,15 +3,15 @@ import streamlit.components.v1 as components
 
 st.set_page_config(page_title="📡 GPS Tracker", layout="centered")
 
-st.title("📡 Real-Time GPS Tracker (1s updates)")
+st.title("📡 Real-Time GPS Tracker (1 record per second)")
 st.markdown("""
-This app records your **position every second** and calculates:
+This app records your **position once per second** and computes:
 - Speed (knots)
 - Bearing to waypoint
 - VMG (Velocity Made Good)
 - ETA (minutes)
 
-Tap **Start** to begin and **Stop** to finish.
+Tap **Start** to begin, **Stop** to finish.
 """)
 
 html_code = """
@@ -31,7 +31,8 @@ let intervalID = null;
 let tracking = false;
 let data = [];
 let lastPos = null;
-let waypoint = {lat: 42.5608, lon: -8.9406};  // Example: Ría de Arousa
+let lastLoggedSecond = null;
+let waypoint = {lat: 42.5608, lon: -8.9406};  // Example waypoint (Ría de Arousa)
 
 function haversine(lat1, lon1, lat2, lon2){
   const R = 6371000;
@@ -66,6 +67,11 @@ function recordPosition(){
     const lon = pos.coords.longitude;
     const now = new Date();
 
+    // ⏱ Only record one per unique second
+    const thisSecond = now.getSeconds();
+    if(thisSecond === lastLoggedSecond) return;
+    lastLoggedSecond = thisSecond;
+
     let spd=0, brg=0, vmg=0, eta=null;
     if(lastPos){
       const dt = (now - lastPos.time)/1000;
@@ -90,9 +96,10 @@ function startTracking(){
     document.getElementById("status").innerText="❌ Geolocation not supported.";
     return;
   }
-  document.getElementById("status").innerText="✅ Tracking started (1s interval)";
+  document.getElementById("status").innerText="✅ Tracking started (1 per second)";
   tracking = true;
-  intervalID = setInterval(recordPosition, 1000); // every second
+  lastLoggedSecond = null;
+  intervalID = setInterval(recordPosition, 1000);
 }
 
 function stopTracking(){
