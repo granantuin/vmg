@@ -1,21 +1,19 @@
 import streamlit as st
+import pandas as pd
+import math
+import time
 import streamlit.components.v1 as components
 
-st.set_page_config(page_title="📡 GPS Tracker — Ría de Arousa", layout="centered")
+st.set_page_config(page_title="📡 Ría Arousa GPS Tracker", layout="centered")
 
-st.title("📡 Real-Time GPS Tracker — Ría de Arousa")
+st.title("📡 Real-Time GPS Tracker — Ría Arousa")
 st.markdown("""
-This app records your **position every second** and computes:
-- Speed (knots)
-- Bearing to selected waypoint
-- VMG (Velocity Made Good)
-- ETA (minutes)
-- Accuracy (±m)
-
-Select a waypoint below, then tap **▶️ Start** to begin and **⏹ Stop** to end and download the CSV.
+Tracks your position every second with high GPS accuracy.  
+Shows bearing, VMG, and ETA to a selected waypoint.  
+Tap **Start Tracking** to begin and **Stop Tracking** to end.
 """)
 
-# --- Waypoints in Ría de Arousa ---
+# --- Waypoints (Ría Arousa) ---
 waypoints = {
     "Rua Norte": (42.5521, -8.9403),
     "Rua Sur": (42.5477, -8.9387),
@@ -28,134 +26,174 @@ waypoints = {
     "Capitán": (42.5185, -8.9799),
 }
 
-# --- Select waypoint ---
-st.subheader("📍 Select Waypoint")
-selected_wp = st.selectbox("Choose a destination:", list(waypoints.keys()))
-lat_wp, lon_wp = waypoints[selected_wp]
-st.write(f"**Selected waypoint:** {selected_wp} — 🌍 Lat: {lat_wp:.5f}, Lon: {lon_wp:.5f}")
+# --- Helper Functions ---
+def haversine(lat1, lon1, lat2, lon2):
+    """Distance in meters between two lat/lon points"""
+    R = 6371000
+    phi1, phi2 = math.radians(lat1), math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlambda = math.radians(lon2 - lon1)
+    a = math.sin(dphi/2)**2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda/2)**2
+    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
 
-# --- JavaScript and HTML ---
-html_code = f"""
-<div id="status" style="font-weight:bold;color:#006400;margin-top:10px;">
-  Waiting to start...
-</div>
+def bearing_to(lat1, lon1, lat2, lon2):
+    """Bearing in degrees from point A to B"""
+    y = math.sin(math.radians(lon2 - lon1)) * math.cos(math.radians(lat2))
+    x = math.cos(math.radians(lat1))*math.sin(math.radians(lat2)) - math.sin(math.radians(lat1))*math.cos(math.radians(lat2))*math.cos(math.radians(lon2 - lon1))
+    brng = math.degrees(math.atan2(y, x))
+    return (brng + 360) % 360
 
-<div style="margin-top:10px;">
-  <button onclick="startTracking()" style="background-color:#4CAF50;color:white;padding:10px 20px;border:none;border-radius:8px;">▶️ Start</button>
-  <button onclick="stopTracking()" style="background-color:#d9534f;color:white;padding:10px 20px;border:none;border-radius:8px;">⏹ Stop</button>
-</div>
+# --- Session State ---
+if "tracking" not in st.session_state:
+    st.session_state.tracking = False
+if "data" not in st.session_state:
+    st.session_state.data = []
 
-<div id="table" style="margin-top:15px;font-family:monospace;font-size:15px;"></div>
+# --- UI Controls ---
+waypoint_name = st.selectbox("📍 Select Waypoint", list(waypoints.keys()))
+waypoint = waypoints[waypoint_name]
 
-<script>
-let intervalID = null;
-let tracking = false;
-let data = [];
-let lastPos = null;
-let lastLoggedSecond = null;
+col1, col2 = st.columns(2)
+with col1:
+    if st.button("▶️ Start Tracking"):
+        st.session_state.tracking = True
+        st.session_state.data = []
+with col2:
+    if st.button("⏹ Stop Tracking"):
+        st.session_state.tracking = False
 
-let waypoint = {{lat: {lat_wp}, lon: {lon_wp}}};
+# --- GPS JavaScript Injection ---
+if st.session_state.tracking:
+    st.success(f"✅ Tracking active — waypoint: **{waypoint_name}**")
 
-function haversine(lat1, lon1, lat2, lon2){{
-  const R = 6371000;
-  const φ1 = lat1*Math.PI/180, φ2 = lat2*Math.PI/180;
-  const dφ = (lat2-lat1)*Math.PI/180, dλ = (lon2-lon1)*Math.PI/180;
-  const a = Math.sin(dφ/2)**2 + Math.cos(φ1)*Math.cos(φ2)*Math.sin(dλ/2)**2;
-  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
-}}
-function bearing(lat1, lon1, lat2, lon2){{
-  const φ1=lat1*Math.PI/180, φ2=lat2*Math.PI/180, Δλ=(lon2-lon1)*Math.PI/180;
-  const x=Math.sin(Δλ)*Math.cos(φ2);
-  const y=Math.cos(φ1)*Math.sin(φ2)-Math.sin(φ1)*Math.cos(φ2)*Math.cos(Δλ);
-  return (Math.atan2(x,y)*180/Math.PI+360)%360;
-}}
+    components.html(f"""
+    <div id="gps-output" style="
+        font-family: monospace;
+        background-color: #f9f9f9;
+        padding: 15px;
+        border-radius: 10px;
+        margin-top: 10px;
+        font-size: 16px;
+        color: #222;">
+      Waiting for GPS data...
+    </div>
 
-function updateTable(){{
-  let html = "<b>Last 10 records</b><br><table border='1' cellspacing='0' cellpadding='3'><tr><th>Time</th><th>Lat</th><th>Lon</th><th>Acc(m)</th><th>Speed(kn)</th><th>Bearing</th><th>VMG</th><th>ETA(min)</th></tr>";
-  const last = data.slice(-10);
-  last.forEach(r=>{{
-    html += `<tr>
-      <td>${{r.time}}</td>
-      <td>${{r.lat.toFixed(5)}}</td>
-      <td>${{r.lon.toFixed(5)}}</td>
-      <td>${{r.acc.toFixed(1)}}</td>
-      <td>${{r.spd ? r.spd.toFixed(2) : "—"}}</td>
-      <td>${{r.brg.toFixed(1)}}</td>
-      <td>${{r.vmg ? r.vmg.toFixed(2) : "—"}}</td>
-      <td>${{r.eta ? r.eta.toFixed(1) : "—"}}</td>
-    </tr>`;
-  }});
-  html += "</table>";
-  document.getElementById("table").innerHTML = html;
-}}
+    <script>
+    let watchId = null;
 
-function recordPosition(){{
-  if(!tracking) return;
-  navigator.geolocation.getCurrentPosition((pos)=>{{
-    const lat = pos.coords.latitude;
-    const lon = pos.coords.longitude;
-    const acc = pos.coords.accuracy;
-    const now = new Date();
-    const thisSecond = now.getSeconds();
-    if(thisSecond === lastLoggedSecond) return;
-    lastLoggedSecond = thisSecond;
+    function startTracking() {{
+      const out = document.getElementById("gps-output");
 
-    let spd=0, brg=0, vmg=0, eta=null;
-    if(lastPos){{
-      const dt = (now - lastPos.time)/1000;
-      const dist = haversine(lastPos.lat,lastPos.lon,lat,lon);
-      const speed_ms = dist/dt;
-      spd = speed_ms * 1.94384; // m/s → knots
-      brg = bearing(lat,lon,waypoint.lat,waypoint.lon);
-      const distWP = haversine(lat,lon,waypoint.lat,waypoint.lon);
-      vmg = spd * Math.cos((brg*Math.PI)/180);
-      eta = speed_ms>0 ? (distWP/(speed_ms*60)) : null;
+      if (!navigator.geolocation) {{
+        out.innerHTML = "❌ Geolocation is not supported by your device.";
+        return;
+      }}
+
+      watchId = navigator.geolocation.watchPosition(
+        (pos) => {{
+          const acc = pos.coords.accuracy;
+          if (acc > 20) {{
+            console.log("Skipped fix, poor accuracy:", acc);
+            return;
+          }}
+          const lat = pos.coords.latitude.toFixed(6);
+          const lon = pos.coords.longitude.toFixed(6);
+          const time = new Date().toISOString();
+
+          out.innerHTML = `
+            <b>Time:</b> ${{new Date(time).toLocaleTimeString()}}<br>
+            <b>Latitude:</b> ${{lat}}<br>
+            <b>Longitude:</b> ${{lon}}<br>
+            <b>Accuracy:</b> ±${{acc.toFixed(1)}} m
+          `;
+
+          window.parent.postMessage(
+            {{lat: lat, lon: lon, acc: acc, time: time}},
+            "*"
+          );
+        }},
+        (err) => {{
+          out.innerHTML = "❌ Error: " + err.message;
+        }},
+        {{
+          enableHighAccuracy: true,
+          maximumAge: 0,
+          timeout: 5000
+        }}
+      );
     }}
-    lastPos = {{lat, lon, acc, time: now}};
-    data.push({{time: now.toLocaleTimeString(), lat, lon, acc, spd, brg, vmg, eta}});
-    updateTable();
-  }},(err)=>{{
-    document.getElementById("status").innerText="❌ "+err.message;
-  }},{{enableHighAccuracy:true}});
-}}
 
-function startTracking(){{
-  if(!navigator.geolocation){{
-    document.getElementById("status").innerText="❌ Geolocation not supported.";
-    return;
-  }}
-  document.getElementById("status").innerText="✅ Tracking started toward {selected_wp}";
-  tracking = true;
-  lastLoggedSecond = null;
-  intervalID = setInterval(recordPosition, 1000);
-}}
+    function stopTracking() {{
+      if (watchId !== null) {{
+        navigator.geolocation.clearWatch(watchId);
+        watchId = null;
+        document.getElementById("gps-output").innerHTML = "<b>Tracking stopped.</b>";
+      }}
+    }}
 
-function stopTracking(){{
-  tracking = false;
-  clearInterval(intervalID);
-  document.getElementById("status").innerText="⏹ Tracking stopped.";
-  const csv = "data:text/csv;charset=utf-8," +
-              ["time,lat,lon,accuracy_m,speed_knots,bearing,vmg,eta_min"].concat(
-                data.map(d=>[d.time,d.lat,d.lon,d.acc.toFixed(1),
-                             (d.spd||0).toFixed(2),
-                             d.brg.toFixed(1),
-                             (d.vmg||0).toFixed(2),
-                             (d.eta||0).toFixed(1)].join(","))
-              ).join("\\n");
-  const link = document.createElement("a");
-  link.href = encodeURI(csv);
-  link.download = "gps_track.csv";
-  link.innerText="💾 Download CSV";
-  document.getElementById("table").appendChild(document.createElement("br"));
-  document.getElementById("table").appendChild(link);
-}}
+    startTracking();
+    window.onbeforeunload = stopTracking;
+    </script>
+    """, height=240)
+
+# --- Receive Data from JS ---
+js_listener = """
+<script>
+window.addEventListener("message", (event) => {
+    const data = event.data;
+    if (data.lat && data.lon && data.time) {
+        const query = new URLSearchParams({
+            lat: data.lat,
+            lon: data.lon,
+            acc: data.acc,
+            time: data.time
+        });
+        fetch(window.location.pathname + "?" + query.toString());
+    }
+});
 </script>
 """
+components.html(js_listener, height=0)
 
-components.html(html_code, height=600)
+# --- Store GPS fixes ---
+params = st.query_params
+if "lat" in params:
+    lat = float(params["lat"][0])
+    lon = float(params["lon"][0])
+    acc = float(params["acc"][0])
+    time_str = params["time"][0]
+    now = pd.to_datetime(time_str)
+    st.session_state.data.append({"time": now, "lat": lat, "lon": lon, "acc": acc})
 
+# --- Compute Metrics ---
+if len(st.session_state.data) > 1:
+    df = pd.DataFrame(st.session_state.data)
+    df["delta_t"] = df["time"].diff().dt.total_seconds().fillna(1)
+    df["dist_m"] = [
+        haversine(df.lat[i-1], df.lon[i-1], df.lat[i], df.lon[i]) if i > 0 else 0
+        for i in range(len(df))
+    ]
+    df["speed_kn"] = df["dist_m"] / df["delta_t"] * 1.94384  # m/s → kn
+    df["bearing"] = [bearing_to(df.lat[i], df.lon[i], waypoint[0], waypoint[1]) for i in range(len(df))]
+    df["dist_to_wp_m"] = [haversine(df.lat[i], df.lon[i], waypoint[0], waypoint[1]) for i in range(len(df))]
+    df["vmg_kn"] = df["speed_kn"] * (
+        (df["bearing"] - df["bearing"].iloc[-1]).apply(lambda x: math.cos(math.radians(x)))
+    )
+    df["eta_min"] = df["dist_to_wp_m"] / (df["vmg_kn"] * 0.51444) / 60
+    df["eta_min"] = df["eta_min"].replace([math.inf, -math.inf], None).round(1)
 
+    # --- Show Table ---
+    st.subheader("📊 Last 10 Records")
+    st.dataframe(df[["time", "lat", "lon", "speed_kn", "bearing", "vmg_kn", "eta_min"]].tail(10), use_container_width=True)
 
+    # --- Download ---
+    csv = df.to_csv(index=False).encode("utf-8")
+    st.download_button("💾 Download Track (CSV)", csv, "gps_log.csv", "text/csv")
+
+elif st.session_state.tracking:
+    st.info("⏳ Waiting for first GPS fix...")
+else:
+    st.warning("Tracking stopped. Tap ▶️ **Start Tracking** to begin.")
 
 
 
