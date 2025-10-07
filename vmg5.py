@@ -1,8 +1,8 @@
 import streamlit as st
 import pandas as pd
 import math
-import streamlit.components.v1 as components
 from datetime import datetime
+import streamlit.components.v1 as components
 
 st.set_page_config(page_title="📡 GPS Tracker — Ría Arousa", layout="centered")
 
@@ -31,7 +31,7 @@ def haversine(lat1, lon1, lat2, lon2):
     phi1, phi2 = math.radians(lat1), math.radians(lat2)
     dphi = math.radians(lat2 - lat1)
     dlambda = math.radians(lon2 - lon1)
-    a = math.sin(dphi/2)**2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda/2)**2
+    a = math.sin(dphi/2)**2 + math.cos(phi1)*math.cos(phi2)*math.sin(dlambda/2)**2
     return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
 def bearing_to(lat1, lon1, lat2, lon2):
@@ -40,13 +40,11 @@ def bearing_to(lat1, lon1, lat2, lon2):
         math.sin(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.cos(math.radians(lon2 - lon1))
     return (math.degrees(math.atan2(y, x)) + 360) % 360
 
-# ---------------- Session state ---------------- #
+# ---------------- Session State ---------------- #
 if "tracking" not in st.session_state:
     st.session_state.tracking = False
 if "data" not in st.session_state:
     st.session_state.data = []
-if "last_fix" not in st.session_state:
-    st.session_state.last_fix = None
 
 # ---------------- Controls ---------------- #
 waypoint_name = st.selectbox("📍 Select Waypoint", list(waypoints.keys()))
@@ -61,7 +59,7 @@ with col2:
     if st.button("⏹ Stop Tracking"):
         st.session_state.tracking = False
 
-# ---------------- JS Listener ---------------- #
+# ---------------- JavaScript GPS Code ---------------- #
 if st.session_state.tracking:
     components.html(
         """
@@ -76,18 +74,22 @@ if st.session_state.tracking:
               const acc = pos.coords.accuracy;
               if (acc > 50) return;
               const now = Date.now();
-              if (now - lastSent < 1000) return; // 1-second throttle
+              if (now - lastSent < 1000) return;  // 1-second throttle
               lastSent = now;
+
               const data = {
                 lat: pos.coords.latitude,
                 lon: pos.coords.longitude,
                 acc: acc,
                 time: new Date().toISOString()
               };
+
               document.getElementById("gps-output").innerHTML =
                 `<b>${new Date(data.time).toLocaleTimeString()}</b><br>
                  Lat: ${data.lat.toFixed(6)} | Lon: ${data.lon.toFixed(6)} | ±${acc.toFixed(1)} m`;
-              window.parent.postMessage({ type: "gps", payload: data }, "*");
+
+              const params = new URLSearchParams(data).toString();
+              window.location.search = params; // sends data to Streamlit via query params
             },
             (err) => { document.getElementById("gps-output").innerHTML = "❌ " + err.message; },
             { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
@@ -100,48 +102,28 @@ if st.session_state.tracking:
         height=180,
     )
 
-# ---------------- Message bridge (browser → Streamlit) ---------------- #
-msg = st.experimental_get_query_params()
-# Using Streamlit WebSocket message hook
-components.html(
-    """
-    <script>
-    window.addEventListener("message", (event) => {
-        if (event.data.type === "gps") {
-            const payload = event.data.payload;
-            fetch("/_stcore/stream", {
-              method: "POST",
-              headers: {"Content-Type": "application/json"},
-              body: JSON.stringify(payload)
-            });
-        }
-    });
-    </script>
-    """,
-    height=0,
-)
-
-# ---------------- Fake data listener (simulated backend update) ---------------- #
-# In Streamlit, we simulate the incoming data loop manually
+# ---------------- Query Params Handler ---------------- #
 params = st.query_params
-if "lat" in params:
+if "lat" in params and st.session_state.tracking:
     lat = float(params["lat"][0])
     lon = float(params["lon"][0])
     acc = float(params["acc"][0])
     t = params["time"][0]
+
+    # Avoid duplicates
     if not st.session_state.data or st.session_state.data[-1]["time"] != t:
         st.session_state.data.append({"time": t, "lat": lat, "lon": lon, "acc": acc})
 
-# ---------------- Process dataframe ---------------- #
+# ---------------- Data Processing ---------------- #
 if len(st.session_state.data) > 1:
     df = pd.DataFrame(st.session_state.data)
     df["time"] = pd.to_datetime(df["time"])
     df["dt"] = df["time"].diff().dt.total_seconds().fillna(1)
-    df["dist_m"] = [haversine(df.lat[i - 1], df.lon[i - 1], df.lat[i], df.lon[i]) if i > 0 else 0 for i in range(len(df))]
+    df["dist_m"] = [haversine(df.lat[i-1], df.lon[i-1], df.lat[i], df.lon[i]) if i > 0 else 0 for i in range(len(df))]
     df["speed_kn"] = (df["dist_m"] / df["dt"] * 1.94384).round(2)
     df["bearing_wp"] = [bearing_to(df.lat[i], df.lon[i], waypoint[0], waypoint[1]) for i in range(len(df))]
     df["dist_wp_m"] = [haversine(df.lat[i], df.lon[i], waypoint[0], waypoint[1]) for i in range(len(df))]
-    df["course"] = [bearing_to(df.lat[i - 1], df.lon[i - 1], df.lat[i], df.lon[i]) if i > 0 else 0 for i in range(len(df))]
+    df["course"] = [bearing_to(df.lat[i-1], df.lon[i-1], df.lat[i], df.lon[i]) if i > 0 else 0 for i in range(len(df))]
     df["vmg_kn"] = (df["speed_kn"] * [
         math.cos(math.radians(df["bearing_wp"].iloc[i] - df["course"].iloc[i])) if i > 0 else 0
         for i in range(len(df))
@@ -164,6 +146,8 @@ elif st.session_state.tracking:
     st.info("⏳ Waiting for first accurate GPS fix (≤ 50 m)...")
 else:
     st.warning("Tracking stopped. Tap ▶️ Start Tracking to begin.")
+
+
 
 
 
