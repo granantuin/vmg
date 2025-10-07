@@ -8,8 +8,8 @@ st.set_page_config(page_title="📡 GPS Tracker — Ría Arousa", layout="center
 
 st.title("📡 Real-Time GPS Tracker — Ría Arousa")
 st.markdown("""
-Tracks your live GPS position when accuracy ≤ 50 m.  
-Shows **Speed (knots)**, **Bearing**, **VMG**, and **ETA** to a selected waypoint.
+Tracks your GPS position live (updates every second if accuracy ≤ 50 m).  
+Computes **Speed (knots)**, **Bearing**, **VMG**, and **ETA** to a selected waypoint.
 """)
 
 # ---------------- Waypoints ---------------- #
@@ -46,7 +46,7 @@ if "tracking" not in st.session_state:
 if "data" not in st.session_state:
     st.session_state.data = []
 
-# ---------------- Controls ---------------- #
+# ---------------- UI Controls ---------------- #
 waypoint_name = st.selectbox("📍 Select Waypoint", list(waypoints.keys()))
 waypoint = waypoints[waypoint_name]
 
@@ -59,37 +59,28 @@ with col2:
     if st.button("⏹ Stop Tracking"):
         st.session_state.tracking = False
 
-# ---------------- JavaScript GPS Code ---------------- #
+# ---------------- JavaScript GPS Tracker ---------------- #
 if st.session_state.tracking:
+    st.success("✅ Tracking active — waiting for GPS fix ≤ 50 m...")
     components.html(
         """
-        <div id="gps-output" style="font-family: monospace; background:#f5f5f5; padding:10px; border-radius:10px;">
-          ⏳ Waiting for GPS fix...
-        </div>
+        <div id="gps-output" style="font-family:monospace;background:#f7f7f7;
+             padding:12px;border-radius:10px;margin-top:10px;">Waiting for GPS...</div>
         <script>
-        let lastSent = 0;
+        let watchId = null;
         if (navigator.geolocation) {
-          navigator.geolocation.watchPosition(
+          watchId = navigator.geolocation.watchPosition(
             (pos) => {
               const acc = pos.coords.accuracy;
-              if (acc > 50) return;
-              const now = Date.now();
-              if (now - lastSent < 1000) return;  // 1-second throttle
-              lastSent = now;
-
-              const data = {
-                lat: pos.coords.latitude,
-                lon: pos.coords.longitude,
-                acc: acc,
-                time: new Date().toISOString()
-              };
-
+              if (acc > 50) return; // only send accurate fixes
+              const lat = pos.coords.latitude;
+              const lon = pos.coords.longitude;
+              const time = new Date().toISOString();
+              const payload = {lat: lat, lon: lon, acc: acc, time: time};
               document.getElementById("gps-output").innerHTML =
-                `<b>${new Date(data.time).toLocaleTimeString()}</b><br>
-                 Lat: ${data.lat.toFixed(6)} | Lon: ${data.lon.toFixed(6)} | ±${acc.toFixed(1)} m`;
-
-              const params = new URLSearchParams(data).toString();
-              window.location.search = params; // sends data to Streamlit via query params
+                `<b>${new Date(time).toLocaleTimeString()}</b><br>
+                 Lat: ${lat.toFixed(6)} | Lon: ${lon.toFixed(6)} | ±${acc.toFixed(1)} m`;
+              window.parent.postMessage(payload, "*");
             },
             (err) => { document.getElementById("gps-output").innerHTML = "❌ " + err.message; },
             { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
@@ -102,17 +93,41 @@ if st.session_state.tracking:
         height=180,
     )
 
-# ---------------- Query Params Handler ---------------- #
-params = st.query_params
-if "lat" in params and st.session_state.tracking:
-    lat = float(params["lat"][0])
-    lon = float(params["lon"][0])
-    acc = float(params["acc"][0])
-    t = params["time"][0]
+# ---------------- Streamlit Message Listener ---------------- #
+msg = st.experimental_get_query_params()  # Fallback dummy init
 
-    # Avoid duplicates
-    if not st.session_state.data or st.session_state.data[-1]["time"] != t:
-        st.session_state.data.append({"time": t, "lat": lat, "lon": lon, "acc": acc})
+# Hidden HTML listener
+components.html(
+    """
+    <script>
+    window.addEventListener("message", (event) => {
+        const d = event.data;
+        if (!d.lat || !d.lon) return;
+        const query = new URLSearchParams(d).toString();
+        fetch("/_stcore/stream", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify(d)
+        }).catch(()=>{});
+        window.location.hash = query;
+    });
+    </script>
+    """,
+    height=0,
+)
+
+# ---------------- Streamlit-side polling ---------------- #
+params = st.query_params
+if "lat" in params:
+    try:
+        lat = float(params["lat"][0])
+        lon = float(params["lon"][0])
+        acc = float(params["acc"][0])
+        t = params["time"][0]
+        if not st.session_state.data or st.session_state.data[-1]["time"] != t:
+            st.session_state.data.append({"time": t, "lat": lat, "lon": lon, "acc": acc})
+    except Exception:
+        pass
 
 # ---------------- Data Processing ---------------- #
 if len(st.session_state.data) > 1:
@@ -137,19 +152,14 @@ if len(st.session_state.data) > 1:
     st.subheader(f"📊 Live Data — Target: {waypoint_name}")
     st.dataframe(df[["time", "lat", "lon", "acc", "speed_kn", "bearing_wp", "vmg_kn", "eta_min"]].tail(10),
                  use_container_width=True)
-    st.map(df[["lat", "lon"]])
 
     csv = df.to_csv(index=False).encode("utf-8")
     st.download_button("💾 Download CSV", csv, "gps_log.csv", "text/csv")
 
 elif st.session_state.tracking:
-    st.info("⏳ Waiting for first accurate GPS fix (≤ 50 m)...")
+    st.info("⏳ Waiting for accurate GPS fix (≤ 50 m)...")
 else:
     st.warning("Tracking stopped. Tap ▶️ Start Tracking to begin.")
-
-
-
-
 
 
 
