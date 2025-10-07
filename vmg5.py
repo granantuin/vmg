@@ -131,7 +131,7 @@ if "lat" in params:
     st.session_state.data.append({"time": time_str, "lat": lat, "lon": lon, "acc": acc})
 
 # --- Process & Display ---
-if len(st.session_state.data) > 1:
+if len(st.session_state.data) >= 1:
     df = pd.DataFrame(st.session_state.data)
     df["time"] = pd.to_datetime(df["time"])
     df["dt"] = df["time"].diff().dt.total_seconds().fillna(1)
@@ -157,6 +157,7 @@ elif st.session_state.tracking:
     st.info("⏳ Waiting for accurate GPS fix (≤ 20 m)...")
 else:
     st.warning("Tracking stopped. Tap ▶️ **Start Tracking** to begin.")
+
 
 
 
