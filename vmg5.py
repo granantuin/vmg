@@ -24,7 +24,7 @@ waypoints = {
     "Moscardiño": (42.5934, -8.8743),
     "Aurora":(42.6021,-8.8064),
     "Ostreira":(42.5946,-8.9134),
-    "Capitán":(42.5185,-89799),
+    "Capitán":(42.5185,-8.9799),
 }
 
 st.subheader("📍 Select Waypoint")
@@ -144,6 +144,7 @@ function stopTracking(){{
 """
 
 components.html(html_code, height=600)
+
 
 
 
