@@ -1,14 +1,15 @@
 import streamlit as st
 import pandas as pd
 import math
+import time
 import streamlit.components.v1 as components
 
 st.set_page_config(page_title="📡 GPS Tracker — Ría Arousa", layout="centered")
 
 st.title("📡 Real-Time GPS Tracker — Ría Arousa")
 st.markdown("""
-Tracks your GPS position whenever a good fix (≤ 50 m accuracy) is received.  
-Select a waypoint to compute **speed**, **bearing**, **VMG**, and **ETA**.
+Tracks your GPS position when accuracy ≤ 50 m.  
+Shows **Speed**, **Bearing**, **VMG**, and **ETA** to a selected waypoint.
 """)
 
 # --- Waypoints ---
@@ -30,21 +31,22 @@ def haversine(lat1, lon1, lat2, lon2):
     phi1, phi2 = math.radians(lat1), math.radians(lat2)
     dphi = math.radians(lat2 - lat1)
     dlambda = math.radians(lon2 - lon1)
-    a = math.sin(dphi/2)**2 + math.cos(phi1)*math.cos(phi2)*math.sin(dlambda/2)**2
+    a = math.sin(dphi / 2)**2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2)**2
     return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
 def bearing_to(lat1, lon1, lat2, lon2):
     y = math.sin(math.radians(lon2 - lon1)) * math.cos(math.radians(lat2))
-    x = math.cos(math.radians(lat1))*math.sin(math.radians(lat2)) - math.sin(math.radians(lat1))*math.cos(math.radians(lat2))*math.cos(math.radians(lon2 - lon1))
+    x = math.cos(math.radians(lat1)) * math.sin(math.radians(lat2)) - \
+        math.sin(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.cos(math.radians(lon2 - lon1))
     return (math.degrees(math.atan2(y, x)) + 360) % 360
 
-# --- Session state ---
+# --- Session State ---
 if "tracking" not in st.session_state:
     st.session_state.tracking = False
 if "data" not in st.session_state:
     st.session_state.data = []
 
-# --- UI ---
+# --- UI Controls ---
 waypoint_name = st.selectbox("📍 Select Waypoint", list(waypoints.keys()))
 waypoint = waypoints[waypoint_name]
 
@@ -57,60 +59,54 @@ with col2:
     if st.button("⏹ Stop Tracking"):
         st.session_state.tracking = False
 
-# --- JavaScript Geolocation ---
+# --- Auto-refresh every 1 second when tracking ---
 if st.session_state.tracking:
-    st.success("✅ Tracking active — waiting for accurate GPS fix (≤ 50 m)...")
+    st.experimental_set_query_params()  # clear old params
+    st_autorefresh = st.runtime.legacy_caching.hashing._get_random_id()  # safe dummy refresh trigger
+    time.sleep(1)
+    st.rerun()
 
+# --- GPS from browser ---
+if st.session_state.tracking:
     components.html(
         """
-        <div id="gps-output" style="font-family: monospace; background:#f0f0f0; padding:10px; border-radius:10px;">
-          Waiting for GPS data...
+        <div id="gps" style="font-family: monospace; background:#f0f0f0; padding:10px; border-radius:10px;">
+          Waiting for GPS fix...
         </div>
         <script>
-        let watchId = null;
         if (navigator.geolocation) {
-          watchId = navigator.geolocation.watchPosition(
+          navigator.geolocation.watchPosition(
             (pos) => {
               const acc = pos.coords.accuracy;
-              if (acc > 50) return; // only update if accuracy ≤ 50 m
+              if (acc > 50) return;
               const lat = pos.coords.latitude.toFixed(6);
               const lon = pos.coords.longitude.toFixed(6);
               const time = new Date().toISOString();
-              document.getElementById("gps-output").innerHTML = `
-                <b>Time:</b> ${new Date(time).toLocaleTimeString()}<br>
-                <b>Lat:</b> ${lat}<br>
-                <b>Lon:</b> ${lon}<br>
-                <b>Accuracy:</b> ±${acc.toFixed(1)} m
-              `;
               window.parent.postMessage({lat: lat, lon: lon, acc: acc, time: time}, "*");
+              document.getElementById("gps").innerHTML =
+                `<b>${new Date(time).toLocaleTimeString()}</b><br>
+                 Lat: ${lat}  Lon: ${lon}  ±${acc.toFixed(1)} m`;
             },
-            (err) => {
-              document.getElementById("gps-output").innerHTML = "❌ " + err.message;
-            },
+            (err) => { document.getElementById("gps").innerHTML = "❌ " + err.message; },
             { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
           );
         } else {
-          document.getElementById("gps-output").innerHTML = "❌ Geolocation not supported.";
+          document.getElementById("gps").innerHTML = "❌ Geolocation not supported.";
         }
         </script>
         """,
-        height=220,
+        height=180,
     )
 
-# --- Listen for messages from JS ---
+# --- Receive updates from JS ---
 components.html(
     """
     <script>
     window.addEventListener("message", (event) => {
-        const data = event.data;
-        if (data.lat && data.lon && data.time) {
-            const query = new URLSearchParams({
-                lat: data.lat,
-                lon: data.lon,
-                acc: data.acc,
-                time: data.time
-            });
-            fetch(window.location.pathname + "?" + query.toString());
+        const d = event.data;
+        if (d.lat && d.lon) {
+            const q = new URLSearchParams(d).toString();
+            fetch(window.location.pathname + "?" + q);
         }
     });
     </script>
@@ -118,57 +114,50 @@ components.html(
     height=0,
 )
 
-# --- Capture GPS data ---
+# --- Capture new GPS data ---
 params = st.query_params
 if "lat" in params:
     lat = float(params["lat"][0])
     lon = float(params["lon"][0])
     acc = float(params["acc"][0])
-    time_str = params["time"][0]
-    st.session_state.data.append({"time": time_str, "lat": lat, "lon": lon, "acc": acc})
+    t = params["time"][0]
+    # Avoid duplicates
+    if not st.session_state.data or st.session_state.data[-1]["time"] != t:
+        st.session_state.data.append({"time": t, "lat": lat, "lon": lon, "acc": acc})
 
-# --- Process & Display ---
+# --- Process + Display ---
 if len(st.session_state.data) > 1:
     df = pd.DataFrame(st.session_state.data)
     df["time"] = pd.to_datetime(df["time"])
     df["dt"] = df["time"].diff().dt.total_seconds().fillna(1)
-
-    # Distance and speed
     df["dist_m"] = [
         haversine(df.lat[i-1], df.lon[i-1], df.lat[i], df.lon[i]) if i > 0 else 0
         for i in range(len(df))
     ]
     df["speed_kn"] = (df["dist_m"] / df["dt"] * 1.94384).round(2)
-
-    # Bearing and distance to waypoint
-    df["bearing_to_wp"] = [bearing_to(df.lat[i], df.lon[i], waypoint[0], waypoint[1]) for i in range(len(df))]
-    df["dist_to_wp_m"] = [haversine(df.lat[i], df.lon[i], waypoint[0], waypoint[1]) for i in range(len(df))]
-
-    # VMG and ETA
+    df["bearing_wp"] = [bearing_to(df.lat[i], df.lon[i], waypoint[0], waypoint[1]) for i in range(len(df))]
+    df["dist_wp_m"] = [haversine(df.lat[i], df.lon[i], waypoint[0], waypoint[1]) for i in range(len(df))]
     df["course"] = [bearing_to(df.lat[i-1], df.lon[i-1], df.lat[i], df.lon[i]) if i > 0 else 0 for i in range(len(df))]
     df["vmg_kn"] = (df["speed_kn"] * [
-        math.cos(math.radians(df["bearing_to_wp"].iloc[i] - df["course"].iloc[i])) if i > 0 else 0
+        math.cos(math.radians(df["bearing_wp"].iloc[i] - df["course"].iloc[i])) if i > 0 else 0
         for i in range(len(df))
     ]).round(2)
     df["eta_min"] = [
-        round(df["dist_to_wp_m"].iloc[i] / (df["vmg_kn"].iloc[i] * 0.51444) / 60, 1)
+        round(df["dist_wp_m"].iloc[i] / (df["vmg_kn"].iloc[i] * 0.51444) / 60, 1)
         if df["vmg_kn"].iloc[i] > 0 else None
         for i in range(len(df))
     ]
 
-    st.subheader(f"📊 Tracking {waypoint_name} — Last {min(10, len(df))} Fixes")
-    st.dataframe(df[["time", "lat", "lon", "acc", "speed_kn", "bearing_to_wp", "vmg_kn", "eta_min"]].tail(10),
+    st.subheader(f"📊 Last {min(10, len(df))} GPS Fixes — Target: {waypoint_name}")
+    st.dataframe(df[["time", "lat", "lon", "acc", "speed_kn", "bearing_wp", "vmg_kn", "eta_min"]].tail(10),
                  use_container_width=True)
 
     csv = df.to_csv(index=False).encode("utf-8")
-    st.download_button("💾 Download CSV Log", csv, "gps_log.csv", "text/csv")
-
+    st.download_button("💾 Download CSV", csv, "gps_log.csv", "text/csv")
 elif st.session_state.tracking:
-    st.info("⏳ Waiting for GPS fixes with ≤ 50 m accuracy...")
+    st.info("⏳ Waiting for first GPS fix (accuracy ≤ 50 m)...")
 else:
-    st.warning("Tracking stopped. Tap ▶️ **Start Tracking** to begin.")
-
-
+    st.warning("Tracking stopped. Tap ▶️ Start Tracking to begin.")
 
 
 
