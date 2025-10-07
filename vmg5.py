@@ -8,7 +8,7 @@ st.set_page_config(page_title="📡 GPS Tracker — Ría Arousa", layout="center
 
 st.title("📡 Real-Time GPS Tracker — Ría Arousa")
 st.markdown("""
-Tracks your GPS position live (updates every second if accuracy ≤ 50 m).  
+Tracks your GPS position live (updates when accuracy ≤ 50 m).  
 Computes **Speed (knots)**, **Bearing**, **VMG**, and **ETA** to a selected waypoint.
 """)
 
@@ -25,7 +25,7 @@ waypoints = {
     "Capitán": (42.5185, -8.9799),
 }
 
-# ---------------- Helper functions ---------------- #
+# ---------------- Helper Functions ---------------- #
 def haversine(lat1, lon1, lat2, lon2):
     R = 6371000
     phi1, phi2 = math.radians(lat1), math.radians(lat2)
@@ -46,7 +46,7 @@ if "tracking" not in st.session_state:
 if "data" not in st.session_state:
     st.session_state.data = []
 
-# ---------------- UI Controls ---------------- #
+# ---------------- Controls ---------------- #
 waypoint_name = st.selectbox("📍 Select Waypoint", list(waypoints.keys()))
 waypoint = waypoints[waypoint_name]
 
@@ -59,9 +59,10 @@ with col2:
     if st.button("⏹ Stop Tracking"):
         st.session_state.tracking = False
 
-# ---------------- JavaScript GPS Tracker ---------------- #
+# ---------------- JavaScript for GPS ---------------- #
 if st.session_state.tracking:
     st.success("✅ Tracking active — waiting for GPS fix ≤ 50 m...")
+
     components.html(
         """
         <div id="gps-output" style="font-family:monospace;background:#f7f7f7;
@@ -72,7 +73,7 @@ if st.session_state.tracking:
           watchId = navigator.geolocation.watchPosition(
             (pos) => {
               const acc = pos.coords.accuracy;
-              if (acc > 50) return; // only send accurate fixes
+              if (acc > 50) return;
               const lat = pos.coords.latitude;
               const lon = pos.coords.longitude;
               const time = new Date().toISOString();
@@ -93,10 +94,7 @@ if st.session_state.tracking:
         height=180,
     )
 
-# ---------------- Streamlit Message Listener ---------------- #
-msg = st.experimental_get_query_params()  # Fallback dummy init
-
-# Hidden HTML listener
+# ---------------- Browser → Streamlit Bridge ---------------- #
 components.html(
     """
     <script>
@@ -104,32 +102,28 @@ components.html(
         const d = event.data;
         if (!d.lat || !d.lon) return;
         const query = new URLSearchParams(d).toString();
-        fetch("/_stcore/stream", {
-            method: "POST",
-            headers: {"Content-Type": "application/json"},
-            body: JSON.stringify(d)
-        }).catch(()=>{});
-        window.location.hash = query;
+        const url = window.location.pathname + "?" + query;
+        window.history.replaceState(null, "", url);
     });
     </script>
     """,
     height=0,
 )
 
-# ---------------- Streamlit-side polling ---------------- #
+# ---------------- Capture Parameters ---------------- #
 params = st.query_params
-if "lat" in params:
+if "lat" in params and "lon" in params:
     try:
-        lat = float(params["lat"][0])
-        lon = float(params["lon"][0])
-        acc = float(params["acc"][0])
-        t = params["time"][0]
+        lat = float(params["lat"])
+        lon = float(params["lon"])
+        acc = float(params["acc"])
+        t = params["time"]
         if not st.session_state.data or st.session_state.data[-1]["time"] != t:
             st.session_state.data.append({"time": t, "lat": lat, "lon": lon, "acc": acc})
     except Exception:
         pass
 
-# ---------------- Data Processing ---------------- #
+# ---------------- Compute + Display ---------------- #
 if len(st.session_state.data) > 1:
     df = pd.DataFrame(st.session_state.data)
     df["time"] = pd.to_datetime(df["time"])
@@ -160,7 +154,6 @@ elif st.session_state.tracking:
     st.info("⏳ Waiting for accurate GPS fix (≤ 50 m)...")
 else:
     st.warning("Tracking stopped. Tap ▶️ Start Tracking to begin.")
-
 
 
 
