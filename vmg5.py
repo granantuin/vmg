@@ -75,7 +75,93 @@ if st.session_state.tracking:
           watchId = navigator.geolocation.watchPosition(
             (pos) => {
               const acc = pos.coords.accuracy;
+              if (acc > 20) return;  // skip poor accuracy
+              const lat = pos.coords.latitude.toFixed(6);
+              const lon = pos.coords.longitude.toFixed(6);
+              const time = new Date().toISOString();
+              document.getElementById("gps-output").innerHTML = `
+                <b>Time:</b> ${new Date(time).toLocaleTimeString()}<br>
+                <b>Lat:</b> ${lat}<br>
+                <b>Lon:</b> ${lon}<br>
+                <b>Accuracy:</b> ±${acc.toFixed(1)} m
+              `;
+              window.parent.postMessage(
+                {lat: lat, lon: lon, acc: acc, time: time},
+                "*"
+              );
+            },
+            (err) => {
+              document.getElementById("gps-output").innerHTML = "❌ " + err.message;
+            },
+            { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
+          );
+        } else {
+          document.getElementById("gps-output").innerHTML = "❌ Geolocation not supported.";
+        }
+        </script>
+        """,
+        height=220,
+    )
 
+# --- JS listener (for communication) ---
+js_listener = """
+<script>
+window.addEventListener("message", (event) => {
+    const data = event.data;
+    if (data.lat && data.lon && data.time) {
+        const query = new URLSearchParams({
+            lat: data.lat,
+            lon: data.lon,
+            acc: data.acc,
+            time: data.time
+        });
+        fetch(window.location.pathname + "?" + query.toString());
+    }
+});
+</script>
+"""
+components.html(js_listener, height=0)
+
+# --- Capture new GPS data ---
+params = st.query_params
+if "lat" in params:
+    lat = float(params["lat"][0])
+    lon = float(params["lon"][0])
+    acc = float(params["acc"][0])
+    time_str = params["time"][0]
+    st.session_state.data.append({"time": time_str, "lat": lat, "lon": lon, "acc": acc})
+
+# --- Compute metrics ---
+if len(st.session_state.data) > 1:
+    df = pd.DataFrame(st.session_state.data)
+    df["time"] = pd.to_datetime(df["time"])
+    df["delta_t"] = df["time"].diff().dt.total_seconds().fillna(1)
+    df["dist_m"] = [
+        haversine(df.lat[i-1], df.lon[i-1], df.lat[i], df.lon[i]) if i > 0 else 0
+        for i in range(len(df))
+    ]
+    df["speed_kn"] = df["dist_m"] / df["delta_t"] * 1.94384
+    df["bearing"] = [bearing_to(df.lat[i], df.lon[i], waypoint[0], waypoint[1]) for i in range(len(df))]
+    df["dist_to_wp_m"] = [haversine(df.lat[i], df.lon[i], waypoint[0], waypoint[1]) for i in range(len(df))]
+    df["vmg_kn"] = df["speed_kn"] * [
+        math.cos(math.radians(df["bearing"].iloc[i] - df["bearing"].iloc[-1])) for i in range(len(df))
+    ]
+    df["eta_min"] = df["dist_to_wp_m"] / (df["vmg_kn"] * 0.51444) / 60
+    df["eta_min"] = df["eta_min"].replace([math.inf, -math.inf], None).round(1)
+
+    st.subheader("📊 Last 10 Records")
+    st.dataframe(
+        df[["time", "lat", "lon", "acc", "speed_kn", "bearing", "vmg_kn", "eta_min"]].tail(10),
+        use_container_width=True
+    )
+
+    csv = df.to_csv(index=False).encode("utf-8")
+    st.download_button("💾 Download CSV", csv, "gps_log.csv", "text/csv")
+
+elif st.session_state.tracking:
+    st.info("⏳ Waiting for GPS fix...")
+else:
+    st.warning("Tracking stopped. Tap ▶️ **Start Tracking** to begin.")
 
 
 
