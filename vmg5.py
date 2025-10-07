@@ -7,8 +7,8 @@ st.set_page_config(page_title="📡 GPS Tracker — Ría Arousa", layout="center
 
 st.title("📡 Real-Time GPS Tracker — Ría Arousa")
 st.markdown("""
-Tracks your GPS position whenever a good fix (≤ 20 m accuracy) is received.  
-Select a waypoint to compute bearing, VMG, and ETA.
+Tracks your GPS position whenever a good fix (≤ 50 m accuracy) is received.  
+Select a waypoint to compute **speed**, **bearing**, **VMG**, and **ETA**.
 """)
 
 # --- Waypoints ---
@@ -26,19 +26,16 @@ waypoints = {
 
 # --- Helper functions ---
 def haversine(lat1, lon1, lat2, lon2):
-    """Distance (m) between two lat/lon points"""
     R = 6371000
     phi1, phi2 = math.radians(lat1), math.radians(lat2)
     dphi = math.radians(lat2 - lat1)
     dlambda = math.radians(lon2 - lon1)
     a = math.sin(dphi/2)**2 + math.cos(phi1)*math.cos(phi2)*math.sin(dlambda/2)**2
-    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
 def bearing_to(lat1, lon1, lat2, lon2):
-    """Bearing (°) from point A to point B"""
     y = math.sin(math.radians(lon2 - lon1)) * math.cos(math.radians(lat2))
-    x = math.cos(math.radians(lat1))*math.sin(math.radians(lat2)) - \
-        math.sin(math.radians(lat1))*math.cos(math.radians(lat2))*math.cos(math.radians(lon2 - lon1))
+    x = math.cos(math.radians(lat1))*math.sin(math.radians(lat2)) - math.sin(math.radians(lat1))*math.cos(math.radians(lat2))*math.cos(math.radians(lon2 - lon1))
     return (math.degrees(math.atan2(y, x)) + 360) % 360
 
 # --- Session state ---
@@ -62,7 +59,7 @@ with col2:
 
 # --- JavaScript Geolocation ---
 if st.session_state.tracking:
-    st.success("✅ Tracking active — waiting for accurate GPS fix...")
+    st.success("✅ Tracking active — waiting for accurate GPS fix (≤ 50 m)...")
 
     components.html(
         """
@@ -75,7 +72,7 @@ if st.session_state.tracking:
           watchId = navigator.geolocation.watchPosition(
             (pos) => {
               const acc = pos.coords.accuracy;
-              if (acc > 50) return; // only update if accuracy ≤ 20 m
+              if (acc > 50) return; // only update if accuracy ≤ 50 m
               const lat = pos.coords.latitude.toFixed(6);
               const lon = pos.coords.longitude.toFixed(6);
               const time = new Date().toISOString();
@@ -100,7 +97,7 @@ if st.session_state.tracking:
         height=220,
     )
 
-# --- Listen to JS messages ---
+# --- Listen for messages from JS ---
 components.html(
     """
     <script>
@@ -131,34 +128,45 @@ if "lat" in params:
     st.session_state.data.append({"time": time_str, "lat": lat, "lon": lon, "acc": acc})
 
 # --- Process & Display ---
-if len(st.session_state.data) >= 1:
+if len(st.session_state.data) > 1:
     df = pd.DataFrame(st.session_state.data)
     df["time"] = pd.to_datetime(df["time"])
     df["dt"] = df["time"].diff().dt.total_seconds().fillna(1)
+
+    # Distance and speed
     df["dist_m"] = [
         haversine(df.lat[i-1], df.lon[i-1], df.lat[i], df.lon[i]) if i > 0 else 0
         for i in range(len(df))
     ]
     df["speed_kn"] = (df["dist_m"] / df["dt"] * 1.94384).round(2)
-    df["bearing"] = [bearing_to(df.lat[i], df.lon[i], waypoint[0], waypoint[1]) for i in range(len(df))]
-    df["dist_wp_m"] = [haversine(df.lat[i], df.lon[i], waypoint[0], waypoint[1]) for i in range(len(df))]
-    df["vmg_kn"] = (df["speed_kn"] * [
-        math.cos(math.radians(df["bearing"].iloc[i] - df["bearing"].iloc[-1])) for i in range(len(df))
-    ]).round(2)
-    df["eta_min"] = (df["dist_wp_m"] / (df["vmg_kn"] * 0.51444) / 60).replace([math.inf, -math.inf], None).round(1)
 
-    st.subheader("📊 Last 10 Valid GPS Fixes (≤ 20 m)")
-    st.dataframe(df[["time", "lat", "lon", "acc", "speed_kn", "bearing", "vmg_kn", "eta_min"]].tail(10), use_container_width=True)
+    # Bearing and distance to waypoint
+    df["bearing_to_wp"] = [bearing_to(df.lat[i], df.lon[i], waypoint[0], waypoint[1]) for i in range(len(df))]
+    df["dist_to_wp_m"] = [haversine(df.lat[i], df.lon[i], waypoint[0], waypoint[1]) for i in range(len(df))]
+
+    # VMG and ETA
+    df["course"] = [bearing_to(df.lat[i-1], df.lon[i-1], df.lat[i], df.lon[i]) if i > 0 else 0 for i in range(len(df))]
+    df["vmg_kn"] = (df["speed_kn"] * [
+        math.cos(math.radians(df["bearing_to_wp"].iloc[i] - df["course"].iloc[i])) if i > 0 else 0
+        for i in range(len(df))
+    ]).round(2)
+    df["eta_min"] = [
+        round(df["dist_to_wp_m"].iloc[i] / (df["vmg_kn"].iloc[i] * 0.51444) / 60, 1)
+        if df["vmg_kn"].iloc[i] > 0 else None
+        for i in range(len(df))
+    ]
+
+    st.subheader(f"📊 Tracking {waypoint_name} — Last {min(10, len(df))} Fixes")
+    st.dataframe(df[["time", "lat", "lon", "acc", "speed_kn", "bearing_to_wp", "vmg_kn", "eta_min"]].tail(10),
+                 use_container_width=True)
 
     csv = df.to_csv(index=False).encode("utf-8")
     st.download_button("💾 Download CSV Log", csv, "gps_log.csv", "text/csv")
 
 elif st.session_state.tracking:
-    st.info("⏳ Waiting for accurate GPS fix (≤ 20 m)...")
+    st.info("⏳ Waiting for GPS fixes with ≤ 50 m accuracy...")
 else:
     st.warning("Tracking stopped. Tap ▶️ **Start Tracking** to begin.")
-
-
 
 
 
