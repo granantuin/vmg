@@ -68,28 +68,63 @@ if st.session_state.tracking:
         <div id="gps-output" style="font-family:monospace;background:#f7f7f7;
              padding:12px;border-radius:10px;margin-top:10px;">Waiting for GPS...</div>
         <script>
-        let watchId = null;
-        if (navigator.geolocation) {
-          watchId = navigator.geolocation.watchPosition(
-            (pos) => {
-              const acc = pos.coords.accuracy;
-              if (acc > 50) return;
-              const lat = pos.coords.latitude;
-              const lon = pos.coords.longitude;
-              const time = new Date().toISOString();
-              const payload = {lat: lat, lon: lon, acc: acc, time: time};
-              document.getElementById("gps-output").innerHTML =
-                `<b>${new Date(time).toLocaleTimeString()}</b><br>
-                 Lat: ${lat.toFixed(6)} | Lon: ${lon.toFixed(6)} | ±${acc.toFixed(1)} m`;
-              window.parent.postMessage(payload, "*");
-            },
-            (err) => { document.getElementById("gps-output").innerHTML = "❌ " + err.message; },
-            { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
-          );
-        } else {
-          document.getElementById("gps-output").innerHTML = "❌ Geolocation not supported.";
+        let lastPos = null;
+        let lastTime = null;
+        
+        function haversine(lat1, lon1, lat2, lon2) {
+          const R = 6371000;
+          const dLat = (lat2 - lat1) * Math.PI / 180;
+          const dLon = (lon2 - lon1) * Math.PI / 180;
+          const a = Math.sin(dLat/2)**2 +
+                    Math.cos(lat1 * Math.PI/180) * Math.cos(lat2 * Math.PI/180) *
+                    Math.sin(dLon/2)**2;
+          return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
         }
+        
+        function bearingTo(lat1, lon1, lat2, lon2) {
+          const y = Math.sin((lon2 - lon1) * Math.PI/180) * Math.cos(lat2 * Math.PI/180);
+          const x = Math.cos(lat1 * Math.PI/180) * Math.sin(lat2 * Math.PI/180) -
+                    Math.sin(lat1 * Math.PI/180) * Math.cos(lat2 * Math.PI/180) *
+                    Math.cos((lon2 - lon1) * Math.PI/180);
+          return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+        }
+        
+        const waypoint = {lat: 42.5934, lon: -8.8743}; // e.g. Moscardiño
+        
+        navigator.geolocation.watchPosition((pos) => {
+          const lat = pos.coords.latitude;
+          const lon = pos.coords.longitude;
+          const acc = pos.coords.accuracy;
+          const time = new Date();
+          let speedKn = 0, bearing = 0, eta = "—";
+        
+          if (lastPos) {
+            const dt = (time - lastTime) / 1000;
+            const dist = haversine(lastPos.lat, lastPos.lon, lat, lon);
+            speedKn = (dist / dt) * 1.94384; // m/s → knots
+            bearing = bearingTo(lat, lon, waypoint.lat, waypoint.lon);
+        
+            const distToWP = haversine(lat, lon, waypoint.lat, waypoint.lon);
+            const etaMin = (speedKn > 0) ? (distToWP / (speedKn * 0.5144) / 60).toFixed(1) : "∞";
+            eta = etaMin;
+          }
+        
+          document.getElementById("gps-output").innerHTML = `
+            <b>${time.toLocaleTimeString()}</b><br>
+            Lat: ${lat.toFixed(6)} | Lon: ${lon.toFixed(6)} | ±${acc.toFixed(1)} m<br>
+            Speed: ${speedKn.toFixed(2)} kn | Bearing→WP: ${bearing.toFixed(1)}°<br>
+            ETA: ${eta} min
+          `;
+        
+          lastPos = {lat, lon};
+          lastTime = time;
+        
+          window.parent.postMessage({lat, lon, acc, time: time.toISOString()}, "*");
+        }, err => {
+          document.getElementById("gps-output").innerHTML = "❌ " + err.message;
+        }, { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 });
         </script>
+
         """,
         height=180,
     )
@@ -165,6 +200,7 @@ elif st.session_state.tracking:
     st.info("⏳ Waiting for accurate GPS fix (≤ 50 m)...")
 else:
     st.warning("Tracking stopped. Tap ▶️ Start Tracking to begin.")
+
 
 
 
