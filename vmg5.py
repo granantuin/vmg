@@ -23,17 +23,25 @@ wp_name = st.selectbox("Select Waypoint", list(waypoints.keys()))
 wp_lat, wp_lon = waypoints[wp_name]
 st.write(f"📍 Waypoint: **{wp_name}** — {wp_lat:.5f}, {wp_lon:.5f}")
 
+# --- Start/Stop buttons ---
+col1, col2 = st.columns(2)
+with col1:
+    start = st.button("▶️ Start Tracking")
+with col2:
+    stop = st.button("⏹️ Stop Tracking")
+
 # --- HTML container for JS output ---
 st.markdown("### Live GPS Data")
+gps_output = st.empty()
 
+# --- Inject JavaScript ---
 gps_script = f"""
 <script>
 const ACC_THRESHOLD = 20; // meters
 let watchId = null;
 const waypoint = {{ lat: {wp_lat}, lon: {wp_lon} }};
-const waypointName = "{wp_name}";
 
-// --- Haversine distance ---
+// Haversine distance
 function haversine(lat1, lon1, lat2, lon2) {{
   const R = 6371000;
   const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -44,7 +52,7 @@ function haversine(lat1, lon1, lat2, lon2) {{
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }}
 
-// --- Bearing ---
+// Bearing calculation
 function bearingTo(lat1, lon1, lat2, lon2) {{
   const y = Math.sin((lon2 - lon1) * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180);
   const x = Math.cos(lat1 * Math.PI / 180) * Math.sin(lat2 * Math.PI / 180) -
@@ -100,10 +108,9 @@ function startTracking() {{
       output.innerHTML = `
         <b>${{time.toLocaleTimeString()}}</b><br>
         Lat: ${{lat.toFixed(6)}} | Lon: ${{lon.toFixed(6)}} | ±${{acc.toFixed(1)}} m<br>
-        Speed: ${{speedKn.toFixed(2)}} kn | Course: ${{hdg ? hdg.toFixed(0) : "—"}}°<br>
-        Bearing → <b>${{waypointName}}</b>: ${{bearingWP.toFixed(0)}}° | Dist: ${(distWP/1852).toFixed(2)} nm<br>
-        VMG: ${{vmg.toFixed(2)}} kn | ETA: ${{etaMin}} min<br>
-        🧭 Virtual Course: ${{virtualCourse.toFixed(0)}}° | VMGvirtual: ${{vmgVirtual.toFixed(2)}} kn | ETAvirtual: ${{etaVirtual}} min
+        Speed: ${{speedKn.toFixed(2)}} kn | Course: ${{hdg ? hdg.toFixed(1) : "—"}}°<br>
+        Bearing→WP: ${{bearingWP.toFixed(1)}}° | VMG: ${{vmg.toFixed(2)}} kn | ETA: ${{etaMin}} min<br>
+        🧭 Virtual Course: ${{virtualCourse.toFixed(1)}}° | VMGvirtual: ${{vmgVirtual.toFixed(2)}} kn | ETAvirtual: ${{etaVirtual}} min
       `;
     }},
     (err) => {{
@@ -123,15 +130,13 @@ function stopTracking() {{
 </script>
 
 <div style="padding:10px;">
-  <div id="gps-output">Waiting for GPS data...</div>
+  <div id="gps-output">Waiting...</div>
   <button onclick="startTracking()">▶️ Start</button>
   <button onclick="stopTracking()">⏹️ Stop</button>
 </div>
 """
 
-st.components.v1.html(gps_script, height=370)
-
-
+st.components.v1.html(gps_script, height=350)
 
 
 
