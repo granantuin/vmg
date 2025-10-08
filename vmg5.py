@@ -1,18 +1,14 @@
-# ======================================
-# 📡 Real-Time GPS Tracker – Ría Arousa (Virtual Course)
-# ======================================
-
 import streamlit as st
 import pandas as pd
 import streamlit.components.v1 as components
 
-st.set_page_config(page_title="📡 GPS Tracker + Virtual Course", layout="centered")
-st.title("📡 Real-Time GPS Tracker – Virtual Course")
+st.set_page_config(page_title="📡 GPS Tracker (No Refresh)", layout="centered")
+st.title("📡 GPS Tracker — Real-Time (No Page Refresh)")
 
 st.markdown("""
-Tracks your live GPS position and calculates:
-- **Speed**, **Course**, **Bearing to waypoint**, **VMG**, **ETA**
-- Adds a **Virtual Course** ±100° from actual heading, and computes **VMGvirtual** & **ETAvirtual**
+This app reads live GPS data (no page refresh), calculates:
+- **Speed (knots)**, **Course (°)**, **Bearing to waypoint (°)**, **VMG**, **ETA**
+- Adds a **Virtual Course** (±100° from course) with **VMGv** and **ETAv**
 """)
 
 # --- Waypoints ---
@@ -30,28 +26,11 @@ waypoints = {
 selected_wp = st.selectbox("🎯 Select waypoint", list(waypoints.keys()))
 wp_lat, wp_lon = waypoints[selected_wp]
 
-# --- Session state ---
-if "tracking" not in st.session_state:
-    st.session_state.tracking = False
+# --- Session storage ---
 if "data" not in st.session_state:
     st.session_state.data = []
 
-# --- Control buttons ---
-col1, col2 = st.columns(2)
-with col1:
-    if st.button("▶️ Start Tracking"):
-        st.session_state.tracking = True
-with col2:
-    if st.button("⏹ Stop Tracking"):
-        st.session_state.tracking = False
-
-# --- Status ---
-if st.session_state.tracking:
-    st.success("✅ Tracking active — receiving GPS data...")
-else:
-    st.warning("⏹ Tracking stopped. Tap ▶️ to start.")
-
-# --- JavaScript GPS logic ---
+# --- JS HTML Block ---
 html_code = f"""
 <div id="gps-output" style="
   font-family: monospace;
@@ -63,12 +42,17 @@ html_code = f"""
   Waiting for GPS fix...
 </div>
 
+<button id="start-btn" style="margin:5px; padding:8px;">▶️ Start Tracking</button>
+<button id="stop-btn" style="margin:5px; padding:8px;">⏹ Stop Tracking</button>
+
 <script>
-let tracking = {str(st.session_state.tracking).lower()};
+let tracking = false;
+let watchId = null;
 let lastPos = null;
 let lastTime = null;
-const MOVE_THRESHOLD = 15;  // meters
-const waypoint = {{lat: {wp_lat}, lon: {wp_lon}}};  // target waypoint
+const MOVE_THRESHOLD = 3; // meters
+const ACC_THRESHOLD = 20; // meters
+const waypoint = {{lat: {wp_lat}, lon: {wp_lon}}};
 
 function haversine(lat1, lon1, lat2, lon2) {{
   const R = 6371000;
@@ -88,28 +72,29 @@ function bearingTo(lat1, lon1, lat2, lon2) {{
   return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
 }}
 
-let watchId = null;
-
 function startTracking() {{
   if (!navigator.geolocation) {{
     document.getElementById("gps-output").innerHTML = "❌ Geolocation not supported.";
     return;
   }}
+
+  tracking = true;
+  document.getElementById("gps-output").innerHTML = "📡 Waiting for GPS fix...";
+
   watchId = navigator.geolocation.watchPosition((pos) => {{
     const lat = pos.coords.latitude;
     const lon = pos.coords.longitude;
     const acc = pos.coords.accuracy;
     const time = new Date();
 
-    if (acc > 30) {{
+    if (acc > ACC_THRESHOLD) {{
       document.getElementById("gps-output").innerHTML =
-        "📡 Waiting for accurate fix (±" + acc.toFixed(1) + " m)";
+        "⏳ Waiting for accurate fix (±" + acc.toFixed(1) + " m)";
       return;
     }}
 
     let speedKn = 0, course = 0, vmg = 0, etaMin = "∞";
     let vmgVirtual = 0, etaVirtual = "∞", courseVirtual = 0;
-
     let bearingWP = bearingTo(lat, lon, waypoint.lat, waypoint.lon);
     let distToWP = haversine(lat, lon, waypoint.lat, waypoint.lon);
 
@@ -120,12 +105,11 @@ function startTracking() {{
         speedKn = (dist / dt) * 1.94384;
         course = bearingTo(lastPos.lat, lastPos.lon, lat, lon);
 
-        // --- VMG & ETA (actual) ---
         const angleDiff = Math.abs(course - bearingWP);
         vmg = speedKn * Math.cos(angleDiff * Math.PI / 180);
         etaMin = (vmg > 0.1) ? (distToWP / (vmg * 0.5144) / 60).toFixed(1) : "∞";
 
-        // --- Virtual Course logic ---
+        // Virtual course ±100°
         const left = (course - 100 + 360) % 360;
         const right = (course + 100) % 360;
         const diffL = Math.abs(((bearingWP - left + 540) % 360) - 180);
@@ -148,6 +132,7 @@ function startTracking() {{
       🧭 Virtual course: ${{courseVirtual.toFixed(1)}}° | VMGv: ${{vmgVirtual.toFixed(2)}} kn | ETAv: ${{etaVirtual}} min
     `;
 
+    // send data to Streamlit
     window.parent.postMessage({{
       lat, lon, acc, time: time.toISOString(),
       speedKn, course, bearingWP, vmg, etaMin,
@@ -171,18 +156,18 @@ function stopTracking() {{
   if (watchId) {{
     navigator.geolocation.clearWatch(watchId);
     watchId = null;
-    document.getElementById("gps-output").innerHTML = "<b>Tracking stopped.</b>";
   }}
+  tracking = false;
+  document.getElementById("gps-output").innerHTML = "⏹ Tracking stopped.";
 }}
 
-if (tracking) startTracking();
-else stopTracking();
+document.getElementById("start-btn").onclick = startTracking;
+document.getElementById("stop-btn").onclick = stopTracking;
 </script>
 """
+components.html(html_code, height=330)
 
-components.html(html_code, height=300)
-
-# --- Handle updates ---
+# --- Receive data sent from JS ---
 params = st.query_params
 if "lat" in params:
     lat = float(params["lat"][0])
@@ -213,18 +198,14 @@ if "lat" in params:
         "eta_virtual": eta_virtual
     })
 
-# --- Show table ---
-if len(st.session_state.data) > 0:
+# --- Display recent data ---
+if st.session_state.data:
     df = pd.DataFrame(st.session_state.data)
     st.dataframe(df.tail(10), use_container_width=True)
     csv = df.to_csv(index=False).encode("utf-8")
     st.download_button("💾 Download CSV Log", csv, "gps_log.csv", "text/csv")
 else:
-    st.info("📡 Waiting for GPS fix...")
-
-
-
-
+    st.info("📡 Waiting for first GPS fix...")
 
 
 
