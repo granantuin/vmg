@@ -1,18 +1,23 @@
+# ==============================
+# 📡 Real-Time GPS Tracker (Streamlit)
+# with Course, Bearing, VMG & ETA
+# ==============================
+
 import streamlit as st
 import pandas as pd
-import math
-from datetime import datetime
 import streamlit.components.v1 as components
 
-st.set_page_config(page_title="📡 GPS Tracker — Ría Arousa", layout="centered")
+st.set_page_config(page_title="📡 Ría Arousa GPS Tracker", layout="centered")
+st.title("📡 Real-Time GPS Tracker – Ría Arousa")
 
-st.title("📡 Real-Time GPS Tracker — Ría Arousa")
 st.markdown("""
-Tracks your GPS position live (updates when accuracy ≤ 50 m).  
-Computes **Speed (knots)**, **Bearing**, **VMG**, and **ETA** to a selected waypoint.
+This app reads your live GPS position and shows:
+- **Speed (knots)**, **Course (°)**, **Bearing to waypoint**, **VMG (knots)**, and **ETA (minutes)**  
+- Select a waypoint from the dropdown  
+- Make sure your browser **allows location access**
 """)
 
-# ---------------- Waypoints ---------------- #
+# --- Waypoints ---
 waypoints = {
     "Rua Norte": (42.5521, -8.9403),
     "Rua Sur": (42.5477, -8.9387),
@@ -24,182 +29,134 @@ waypoints = {
     "Ostreira": (42.5946, -8.9134),
     "Capitán": (42.5185, -8.9799),
 }
+selected_wp = st.selectbox("🎯 Select waypoint", list(waypoints.keys()))
+wp_lat, wp_lon = waypoints[selected_wp]
 
-# ---------------- Helper Functions ---------------- #
-def haversine(lat1, lon1, lat2, lon2):
-    R = 6371000
-    phi1, phi2 = math.radians(lat1), math.radians(lat2)
-    dphi = math.radians(lat2 - lat1)
-    dlambda = math.radians(lon2 - lon1)
-    a = math.sin(dphi/2)**2 + math.cos(phi1)*math.cos(phi2)*math.sin(dlambda/2)**2
-    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-
-def bearing_to(lat1, lon1, lat2, lon2):
-    y = math.sin(math.radians(lon2 - lon1)) * math.cos(math.radians(lat2))
-    x = math.cos(math.radians(lat1)) * math.sin(math.radians(lat2)) - \
-        math.sin(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.cos(math.radians(lon2 - lon1))
-    return (math.degrees(math.atan2(y, x)) + 360) % 360
-
-# ---------------- Session State ---------------- #
-if "tracking" not in st.session_state:
-    st.session_state.tracking = False
+# --- Data storage ---
 if "data" not in st.session_state:
     st.session_state.data = []
 
-# ---------------- Controls ---------------- #
-waypoint_name = st.selectbox("📍 Select Waypoint", list(waypoints.keys()))
-waypoint = waypoints[waypoint_name]
+# --- JavaScript for GPS tracking ---
+html_code = f"""
+<div id="gps-output" style="
+  font-family: monospace;
+  background-color: #eef;
+  padding: 10px;
+  border-radius: 10px;
+  margin-top: 10px;
+  color: #000;">
+  Waiting for GPS data...
+</div>
 
-col1, col2 = st.columns(2)
-with col1:
-    if st.button("▶️ Start Tracking"):
-        st.session_state.tracking = True
-        st.session_state.data = []
-with col2:
-    if st.button("⏹ Stop Tracking"):
-        st.session_state.tracking = False
+<script>
+let lastPos = null;
+let lastTime = null;
 
-# ---------------- JavaScript for GPS ---------------- #
-if st.session_state.tracking:
-    st.success("✅ Tracking active — waiting for GPS fix ≤ 50 m...")
+// --- Haversine ---
+function haversine(lat1, lon1, lat2, lon2) {{
+  const R = 6371000;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 +
+            Math.cos(lat1 * Math.PI/180) * Math.cos(lat2 * Math.PI/180) *
+            Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}}
 
-    components.html(
-        """
-        <div id="gps-output" style="font-family:monospace;background:#f7f7f7;
-             padding:12px;border-radius:10px;margin-top:10px;">Waiting for GPS...</div>
-        <script>
-        let lastPos = null;
-        let lastTime = null;
-        
-        function haversine(lat1, lon1, lat2, lon2) {
-          const R = 6371000;
-          const dLat = (lat2 - lat1) * Math.PI / 180;
-          const dLon = (lon2 - lon1) * Math.PI / 180;
-          const a = Math.sin(dLat/2)**2 +
-                    Math.cos(lat1 * Math.PI/180) * Math.cos(lat2 * Math.PI/180) *
-                    Math.sin(dLon/2)**2;
-          return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-        }
-        
-        function bearingTo(lat1, lon1, lat2, lon2) {
-          const y = Math.sin((lon2 - lon1) * Math.PI/180) * Math.cos(lat2 * Math.PI/180);
-          const x = Math.cos(lat1 * Math.PI/180) * Math.sin(lat2 * Math.PI/180) -
-                    Math.sin(lat1 * Math.PI/180) * Math.cos(lat2 * Math.PI/180) *
-                    Math.cos((lon2 - lon1) * Math.PI/180);
-          return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
-        }
-        
-        const waypoint = {lat: 42.5934, lon: -8.8743}; // e.g. Moscardiño
-        
-        navigator.geolocation.watchPosition((pos) => {
-          const lat = pos.coords.latitude;
-          const lon = pos.coords.longitude;
-          const acc = pos.coords.accuracy;
-          const time = new Date();
-          let speedKn = 0, bearing = 0, eta = "—";
-        
-          if (lastPos) {
-            const dt = (time - lastTime) / 1000;
-            const dist = haversine(lastPos.lat, lastPos.lon, lat, lon);
-            speedKn = (dist / dt) * 1.94384; // m/s → knots
-            bearing = bearingTo(lat, lon, waypoint.lat, waypoint.lon);
-        
-            const distToWP = haversine(lat, lon, waypoint.lat, waypoint.lon);
-            const etaMin = (speedKn > 0) ? (distToWP / (speedKn * 0.5144) / 60).toFixed(1) : "∞";
-            eta = etaMin;
-          }
-        
-          document.getElementById("gps-output").innerHTML = `
-            <b>${time.toLocaleTimeString()}</b><br>
-            Lat: ${lat.toFixed(6)} | Lon: ${lon.toFixed(6)} | ±${acc.toFixed(1)} m<br>
-            Speed: ${speedKn.toFixed(2)} kn | Bearing→WP: ${bearing.toFixed(1)}°<br>
-            ETA: ${eta} min
-          `;
-        
-          lastPos = {lat, lon};
-          lastTime = time;
-        
-          window.parent.postMessage({lat, lon, acc, time: time.toISOString()}, "*");
-        }, err => {
-          document.getElementById("gps-output").innerHTML = "❌ " + err.message;
-        }, { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 });
-        </script>
+// --- Bearing ---
+function bearingTo(lat1, lon1, lat2, lon2) {{
+  const y = Math.sin((lon2 - lon1) * Math.PI/180) * Math.cos(lat2 * Math.PI/180);
+  const x = Math.cos(lat1 * Math.PI/180) * Math.sin(lat2 * Math.PI/180) -
+            Math.sin(lat1 * Math.PI/180) * Math.cos(lat2 * Math.PI/180) *
+            Math.cos((lon2 - lon1) * Math.PI/180);
+  return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+}}
 
-        """,
-        height=180,
-    )
+// --- Waypoint ---
+const waypoint = {{lat: {wp_lat}, lon: {wp_lon}}};
 
-# ---------------- Browser → Streamlit Bridge ---------------- #
-components.html(
-    """
-    <script>
-    window.addEventListener("message", (event) => {
-        const d = event.data;
-        if (!d.lat || !d.lon) return;
-        const query = new URLSearchParams(d).toString();
-        const url = window.location.pathname + "?" + query;
-        window.history.replaceState(null, "", url);
-    });
-    </script>
-    """,
-    height=0,
-)
+navigator.geolocation.watchPosition((pos) => {{
+  const lat = pos.coords.latitude;
+  const lon = pos.coords.longitude;
+  const acc = pos.coords.accuracy;
+  const time = new Date();
 
-# ---------------- Capture Parameters ---------------- #
+  let speedKn = 0, course = 0, bearingWP = 0, eta = "—", vmg = 0;
+
+  if (lastPos) {{
+    const dt = (time - lastTime) / 1000;
+    const dist = haversine(lastPos.lat, lastPos.lon, lat, lon);
+    speedKn = (dist / dt) * 1.94384; // m/s → knots
+    course = bearingTo(lastPos.lat, lastPos.lon, lat, lon);
+    bearingWP = bearingTo(lat, lon, waypoint.lat, waypoint.lon);
+    const distToWP = haversine(lat, lon, waypoint.lat, waypoint.lon);
+    const angleDiff = Math.abs(course - bearingWP);
+    vmg = speedKn * Math.cos(angleDiff * Math.PI / 180);
+    const etaMin = (vmg > 0.1) ? (distToWP / (vmg * 0.5144) / 60).toFixed(1) : "∞";
+    eta = etaMin;
+  }}
+
+  document.getElementById("gps-output").innerHTML = `
+    <b>${{time.toLocaleTimeString()}}</b><br>
+    Lat: ${{lat.toFixed(6)}} | Lon: ${{lon.toFixed(6)}} | ±${{acc.toFixed(1)}} m<br>
+    Speed: ${{speedKn.toFixed(2)}} kn | Course: ${{course.toFixed(1)}}°<br>
+    Bearing→{selected_wp}: ${{bearingWP.toFixed(1)}}° | VMG: ${{vmg.toFixed(2)}} kn<br>
+    ETA: ${{eta}} min
+  `;
+
+  window.parent.postMessage({{
+    lat, lon, acc, time: time.toISOString(),
+    speedKn, course, bearingWP, vmg, eta
+  }}, "*");
+
+  lastPos = {{lat, lon}};
+  lastTime = time;
+}}, err => {{
+  document.getElementById("gps-output").innerHTML = "❌ " + err.message;
+}}, {{
+  enableHighAccuracy: true,
+  maximumAge: 0,
+  timeout: 10000
+}});
+</script>
+"""
+
+components.html(html_code, height=220)
+
+# --- Receive messages from JS ---
 params = st.query_params
-if "lat" in params and "lon" in params:
-    try:
-        lat = float(params["lat"])
-        lon = float(params["lon"])
-        acc = float(params["acc"])
-        t = params["time"]
-        if not st.session_state.data or st.session_state.data[-1]["time"] != t:
-            st.session_state.data.append({"time": t, "lat": lat, "lon": lon, "acc": acc})
-    except Exception:
-        pass
+if "lat" in params:
+    lat = float(params["lat"][0])
+    lon = float(params["lon"][0])
+    acc = float(params["acc"][0])
+    time = params["time"][0]
+    speed = float(params.get("speedKn", [0])[0])
+    course = float(params.get("course", [0])[0])
+    bearing = float(params.get("bearingWP", [0])[0])
+    vmg = float(params.get("vmg", [0])[0])
+    eta = params.get("eta", ["—"])[0]
+    st.session_state.data.append({
+        "time": time,
+        "lat": lat,
+        "lon": lon,
+        "acc_m": acc,
+        "speed_kn": round(speed, 2),
+        "course_deg": round(course, 1),
+        "bearing_deg": round(bearing, 1),
+        "vmg_kn": round(vmg, 2),
+        "eta_min": eta
+    })
 
-# ---------------- Compute + Display ---------------- #
-if len(st.session_state.data) > 1:
+# --- Display data ---
+if len(st.session_state.data) > 0:
     df = pd.DataFrame(st.session_state.data)
-    df["time"] = pd.to_datetime(df["time"])
-    df["dt"] = df["time"].diff().dt.total_seconds().fillna(1)
-    df["dist_m"] = [haversine(df.lat[i-1], df.lon[i-1], df.lat[i], df.lon[i]) if i > 0 else 0 for i in range(len(df))]
-    df["speed_kn"] = (df["dist_m"] / df["dt"] * 1.94384).round(2)
-    df["bearing_wp"] = [bearing_to(df.lat[i], df.lon[i], waypoint[0], waypoint[1]) for i in range(len(df))]
-    df["dist_wp_m"] = [haversine(df.lat[i], df.lon[i], waypoint[0], waypoint[1]) for i in range(len(df))]
-    df["course"] = [bearing_to(df.lat[i-1], df.lon[i-1], df.lat[i], df.lon[i]) if i > 0 else 0 for i in range(len(df))]
-    df["vmg_kn"] = (df["speed_kn"] * [
-        math.cos(math.radians(df["bearing_wp"].iloc[i] - df["course"].iloc[i])) if i > 0 else 0
-        for i in range(len(df))
-    ]).round(2)
-    df["eta_min"] = [
-        round(df["dist_wp_m"].iloc[i] / (df["vmg_kn"].iloc[i] * 0.51444) / 60, 1)
-        if df["vmg_kn"].iloc[i] > 0 else None
-        for i in range(len(df))
-    ]
-
-    # After computing df and before showing dataframe:
-    latest = df.iloc[-1]
-    st.markdown(f"""
-    <div style="background:#eef; padding:10px; border-radius:10px; font-family:monospace;">
-    <b>Last Fix:</b> {latest['time'].strftime('%H:%M:%S')}<br>
-    Lat: {latest['lat']:.6f} | Lon: {latest['lon']:.6f} | ±{latest['acc']:.1f} m<br>
-    Speed: {latest['speed_kn']:.2f} kn | Bearing→WP: {latest['bearing_wp']:.1f}°<br>
-    VMG: {latest['vmg_kn']:.2f} kn | ETA: {latest['eta_min'] if latest['eta_min'] else '—'} min
-    </div>
-    """, unsafe_allow_html=True)
-    
-    st.subheader(f"📊 Live Data — Target: {waypoint_name}")
-    st.dataframe(df[["time", "lat", "lon", "acc", "speed_kn", "bearing_wp", "vmg_kn", "eta_min"]].tail(10),
-                 use_container_width=True)
-
+    st.dataframe(df.tail(10), use_container_width=True)
     csv = df.to_csv(index=False).encode("utf-8")
-    st.download_button("💾 Download CSV", csv, "gps_log.csv", "text/csv")
-
-elif st.session_state.tracking:
-    st.info("⏳ Waiting for accurate GPS fix (≤ 50 m)...")
+    st.download_button("💾 Download CSV Log", csv, "gps_log.csv", "text/csv")
 else:
-    st.warning("Tracking stopped. Tap ▶️ Start Tracking to begin.")
+    st.info("Waiting for GPS data...")
+
+
 
 
 
