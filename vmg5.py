@@ -1,6 +1,6 @@
-# ==============================
-# 📡 Real-Time GPS Tracker – Ría Arousa (with Start/Stop toggle)
-# ==============================
+# ======================================
+# 📡 Real-Time GPS Tracker – Ría Arousa
+# ======================================
 
 import streamlit as st
 import pandas as pd
@@ -11,9 +11,8 @@ st.title("📡 Real-Time GPS Tracker – Ría Arousa")
 
 st.markdown("""
 This app records your live GPS position and computes:
-- **Speed (knots)**, **Course (°)**, **Bearing to waypoint**, **VMG**, **ETA**
-- Filters small jitter: updates only when movement > 5 m
-- High accuracy mode (±30 m or better)
+- **Speed (knots)**, **Course (°)**, **Bearing to waypoint**, **VMG**, **ETA (min)**
+- Updates only when movement > 5 m and accuracy ≤ 30 m.
 """)
 
 # --- Waypoints ---
@@ -37,17 +36,20 @@ if "tracking" not in st.session_state:
 if "data" not in st.session_state:
     st.session_state.data = []
 
-# --- Toggle button ---
-if st.button("▶️ Start Tracking" if not st.session_state.tracking else "⏹ Stop Tracking"):
-    st.session_state.tracking = not st.session_state.tracking
+# --- Control buttons ---
+col1, col2 = st.columns(2)
+with col1:
+    if st.button("▶️ Start Tracking"):
+        st.session_state.tracking = True
+with col2:
+    if st.button("⏹ Stop Tracking"):
+        st.session_state.tracking = False
 
-# --- Start tracking ---
+# --- Status display ---
 if st.session_state.tracking:
     st.success("✅ Tracking active — receiving GPS data...")
-    tracking_status = "start"
 else:
     st.warning("⏹ Tracking stopped. Tap ▶️ to start.")
-    tracking_status = "stop"
 
 # --- JavaScript GPS logic ---
 html_code = f"""
@@ -66,7 +68,7 @@ let tracking = {str(st.session_state.tracking).lower()};
 let lastPos = null;
 let lastTime = null;
 const MOVE_THRESHOLD = 5;  // meters
-const waypoint = {{lat: {wp_lat}, lon: {wp_lon}}}  // target waypoint
+const waypoint = {{lat: {wp_lat}, lon: {wp_lon}}};  // target waypoint
 
 function haversine(lat1, lon1, lat2, lon2) {{
   const R = 6371000;
@@ -160,7 +162,7 @@ else stopTracking();
 </script>
 """
 
-components.html(html_code, height=270)
+components.html(html_code, height=280)
 
 # --- Receive updates ---
 params = st.query_params
@@ -186,16 +188,14 @@ if "lat" in params:
         "eta_min": eta
     })
 
-# --- Display table ---
+# --- Show table ---
 if len(st.session_state.data) > 0:
     df = pd.DataFrame(st.session_state.data)
     st.dataframe(df.tail(10), use_container_width=True)
     csv = df.to_csv(index=False).encode("utf-8")
     st.download_button("💾 Download CSV Log", csv, "gps_log.csv", "text/csv")
 else:
-    st.info("📡 Waiting for first GPS fix...")
-
-
+    st.info("📡 Waiting for GPS fix...")
 
 
 
