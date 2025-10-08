@@ -1,6 +1,6 @@
 # ==============================
 # 📡 Real-Time GPS Tracker (Streamlit)
-# Filters out GPS noise — updates only on real movement
+# Always shows position/time — only computes motion when real movement
 # ==============================
 
 import streamlit as st
@@ -12,8 +12,9 @@ st.title("📡 Real-Time GPS Tracker – Ría Arousa")
 
 st.markdown("""
 This app records your live GPS position and shows:
+- **Lat/Lon**, **Time**, **Accuracy**
 - **Speed (knots)**, **Course (°)**, **Bearing**, **VMG**, **ETA**
-- Updates only when movement exceeds a threshold (ignores GPS jitter)
+- Updates motion data only when you actually move (filters out GPS noise)
 """)
 
 # --- Waypoints ---
@@ -50,7 +51,7 @@ html_code = f"""
 <script>
 let lastPos = null;
 let lastTime = null;
-const MOVE_THRESHOLD = 10; // meters — minimum to consider real movement
+const MOVE_THRESHOLD = 5; // meters — minimum to consider real movement
 
 // --- Haversine (m) ---
 function haversine(lat1, lon1, lat2, lon2) {{
@@ -85,35 +86,38 @@ navigator.geolocation.watchPosition((pos) => {{
     return;
   }}
 
+  let speedKn = 0;
+  let course = 0;
+  let bearingWP = bearingTo(lat, lon, waypoint.lat, waypoint.lon);
+  let distToWP = haversine(lat, lon, waypoint.lat, waypoint.lon);
+  let vmg = 0;
+  let etaMin = "∞";
+
   if (lastPos) {{
     const dist = haversine(lastPos.lat, lastPos.lon, lat, lon);
     const dt = (time - lastTime) / 1000;
 
-    if (dist < MOVE_THRESHOLD || dt < 1) {{
-      return; // Ignore small jitter or too frequent updates
+    if (dist >= MOVE_THRESHOLD && dt > 0) {{
+      speedKn = (dist / dt) * 1.94384; // knots
+      course = bearingTo(lastPos.lat, lastPos.lon, lat, lon);
+      const angleDiff = Math.abs(course - bearingWP);
+      vmg = speedKn * Math.cos(angleDiff * Math.PI / 180);
+      etaMin = (vmg > 0.1) ? (distToWP / (vmg * 0.5144) / 60).toFixed(1) : "∞";
     }}
-
-    const speedKn = (dist / dt) * 1.94384; // knots
-    const course = bearingTo(lastPos.lat, lastPos.lon, lat, lon);
-    const bearingWP = bearingTo(lat, lon, waypoint.lat, waypoint.lon);
-    const distToWP = haversine(lat, lon, waypoint.lat, waypoint.lon);
-    const angleDiff = Math.abs(course - bearingWP);
-    const vmg = speedKn * Math.cos(angleDiff * Math.PI / 180);
-    const etaMin = (vmg > 0.1) ? (distToWP / (vmg * 0.5144) / 60).toFixed(1) : "∞";
-
-    document.getElementById("gps-output").innerHTML = `
-      <b>${{time.toLocaleTimeString()}}</b><br>
-      Lat: ${{lat.toFixed(6)}} | Lon: ${{lon.toFixed(6)}} | ±${{acc.toFixed(1)}} m<br>
-      Speed: ${{speedKn.toFixed(2)}} kn | Course: ${{course.toFixed(1)}}°<br>
-      Bearing→{selected_wp}: ${{bearingWP.toFixed(1)}}° | VMG: ${{vmg.toFixed(2)}} kn<br>
-      ETA: ${{etaMin}} min
-    `;
-
-    window.parent.postMessage({{
-      lat, lon, acc, time: time.toISOString(),
-      speedKn, course, bearingWP, vmg, eta: etaMin
-    }}, "*");
   }}
+
+  document.getElementById("gps-output").innerHTML = `
+    <b>${{time.toLocaleTimeString()}}</b><br>
+    Lat: ${{lat.toFixed(6)}} | Lon: ${{lon.toFixed(6)}} | ±${{acc.toFixed(1)}} m<br>
+    Speed: ${{speedKn.toFixed(2)}} kn | Course: ${{course.toFixed(1)}}°<br>
+    Bearing→{selected_wp}: ${{bearingWP.toFixed(1)}}° | VMG: ${{vmg.toFixed(2)}} kn<br>
+    ETA: ${{etaMin}} min
+  `;
+
+  window.parent.postMessage({{
+    lat, lon, acc, time: time.toISOString(),
+    speedKn, course, bearingWP, vmg, eta: etaMin
+  }}, "*");
 
   lastPos = {{lat, lon}};
   lastTime = time;
@@ -128,9 +132,9 @@ navigator.geolocation.watchPosition((pos) => {{
 </script>
 """
 
-components.html(html_code, height=240)
+components.html(html_code, height=250)
 
-# --- Get updates from JS ---
+# --- Receive updates ---
 params = st.query_params
 if "lat" in params:
     lat = float(params["lat"][0])
@@ -154,14 +158,15 @@ if "lat" in params:
         "eta_min": eta
     })
 
-# --- Display dataframe ---
+# --- Display table ---
 if len(st.session_state.data) > 0:
     df = pd.DataFrame(st.session_state.data)
     st.dataframe(df.tail(10), use_container_width=True)
     csv = df.to_csv(index=False).encode("utf-8")
     st.download_button("💾 Download CSV Log", csv, "gps_log.csv", "text/csv")
 else:
-    st.info("📡 Waiting for movement or accurate GPS fix...")
+    st.info("📡 Waiting for first accurate GPS fix...")
+
 
 
 
