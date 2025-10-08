@@ -6,7 +6,7 @@ st.set_page_config(page_title="📡 FANPI Project", layout="centered")
 st.title("📡FANPI Project ")
 
 st.markdown("""
-This app reads live GPS data (no page refresh), calculates:
+This app reads live GPS data, calculates:
 - **Speed (knots)**, **Course (°)**, **Bearing to waypoint (°)**, **VMG**, **ETA**
 - Adds a **Virtual Course** (±100° from course) with **VMGv** and **ETAv**
 """)
@@ -167,45 +167,7 @@ document.getElementById("stop-btn").onclick = stopTracking;
 """
 components.html(html_code, height=330)
 
-# --- Receive data sent from JS ---
-params = st.query_params
-if "lat" in params:
-    lat = float(params["lat"][0])
-    lon = float(params["lon"][0])
-    acc = float(params["acc"][0])
-    time = params["time"][0]
-    speed = float(params.get("speedKn", [0])[0])
-    course = float(params.get("course", [0])[0])
-    bearing = float(params.get("bearingWP", [0])[0])
-    vmg = float(params.get("vmg", [0])[0])
-    eta = params.get("etaMin", ["—"])[0]
-    course_virtual = float(params.get("courseVirtual", [0])[0])
-    vmg_virtual = float(params.get("vmgVirtual", [0])[0])
-    eta_virtual = params.get("etaVirtual", ["—"])[0]
 
-    st.session_state.data.append({
-        "time": time,
-        "lat": lat,
-        "lon": lon,
-        "acc_m": acc,
-        "speed_kn": round(speed, 2),
-        "course_deg": round(course, 1),
-        "bearing_deg": round(bearing, 1),
-        "vmg_kn": round(vmg, 2),
-        "eta_min": eta,
-        "course_virtual": round(course_virtual, 1),
-        "vmg_virtual": round(vmg_virtual, 2),
-        "eta_virtual": eta_virtual
-    })
-
-# --- Display recent data ---
-if st.session_state.data:
-    df = pd.DataFrame(st.session_state.data)
-    st.dataframe(df.tail(10), use_container_width=True)
-    csv = df.to_csv(index=False).encode("utf-8")
-    st.download_button("💾 Download CSV Log", csv, "gps_log.csv", "text/csv")
-else:
-    st.info("📡 Waiting for first GPS fix...")
 
 
 
