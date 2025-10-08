@@ -24,11 +24,6 @@ wp_lat, wp_lon = waypoints[wp_name]
 st.write(f"📍 Waypoint: **{wp_name}** — {wp_lat:.5f}, {wp_lon:.5f}")
 
 # --- Start/Stop buttons ---
-col1, col2 = st.columns(2)
-with col1:
-    start = st.button("▶️ Start Tracking")
-with col2:
-    stop = st.button("⏹️ Stop Tracking")
 
 # --- HTML container for JS output ---
 st.markdown("### Live GPS Data")
@@ -108,9 +103,9 @@ function startTracking() {{
       output.innerHTML = `
         <b>${{time.toLocaleTimeString()}}</b><br>
         Lat: ${{lat.toFixed(6)}} | Lon: ${{lon.toFixed(6)}} | ±${{acc.toFixed(1)}} m<br>
-        Speed: ${{speedKn.toFixed(2)}} kn | Course: ${{hdg ? hdg.toFixed(1) : "—"}}°<br>
-        Bearing→WP: ${{bearingWP.toFixed(1)}}° | VMG: ${{vmg.toFixed(2)}} kn | ETA: ${{etaMin}} min<br>
-        🧭 Virtual Course: ${{virtualCourse.toFixed(1)}}° | VMGvirtual: ${{vmgVirtual.toFixed(2)}} kn | ETAvirtual: ${{etaVirtual}} min
+        Speed: ${{speedKn.toFixed(1)}} kn | Course: ${{hdg ? hdg.toFixed(0) : "—"}}°<br>
+        Bearing→WP: ${{bearingWP.toFixed(0)}}° | VMG: ${{vmg.toFixed(1)}} kn | ETA: ${{etaMin}} min<br>
+        🧭 Virtual Course: ${{virtualCourse.toFixed(0)}}° | VMGvirtual: ${{vmgVirtual.toFixed(1)}} kn | ETAvirtual: ${{etaVirtual}} min
       `;
     }},
     (err) => {{
@@ -137,6 +132,7 @@ function stopTracking() {{
 """
 
 st.components.v1.html(gps_script, height=350)
+
 
 
 
