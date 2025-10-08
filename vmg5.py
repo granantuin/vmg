@@ -50,7 +50,7 @@ html_code = f"""
 <script>
 let lastPos = null;
 let lastTime = null;
-const MOVE_THRESHOLD = 5; // meters — minimum to consider real movement
+const MOVE_THRESHOLD = 10; // meters — minimum to consider real movement
 
 // --- Haversine (m) ---
 function haversine(lat1, lon1, lat2, lon2) {{
@@ -162,6 +162,7 @@ if len(st.session_state.data) > 0:
     st.download_button("💾 Download CSV Log", csv, "gps_log.csv", "text/csv")
 else:
     st.info("📡 Waiting for movement or accurate GPS fix...")
+
 
 
 
