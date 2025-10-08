@@ -23,12 +23,6 @@ wp_name = st.selectbox("Select Waypoint", list(waypoints.keys()))
 wp_lat, wp_lon = waypoints[wp_name]
 st.write(f"📍 Waypoint: **{wp_name}** — {wp_lat:.5f}, {wp_lon:.5f}")
 
-# --- Start/Stop buttons ---
-col1, col2 = st.columns(2)
-with col1:
-    start = st.button("▶️ Start Tracking")
-with col2:
-    stop = st.button("⏹️ Stop Tracking")
 
 # --- HTML container for JS output ---
 st.markdown("### Live GPS Data")
@@ -137,6 +131,7 @@ function stopTracking() {{
 """
 
 st.components.v1.html(gps_script, height=350)
+
 
 
 
