@@ -2,8 +2,8 @@ import streamlit as st
 import pandas as pd
 import streamlit.components.v1 as components
 
-st.set_page_config(page_title="📡 GPS Tracker (No Refresh)", layout="centered")
-st.title("📡 GPS Tracker — Real-Time (No Page Refresh)")
+st.set_page_config(page_title="📡 FANPI Project", layout="centered")
+st.title("📡FANPI Project ")
 
 st.markdown("""
 This app reads live GPS data (no page refresh), calculates:
@@ -206,6 +206,7 @@ if st.session_state.data:
     st.download_button("💾 Download CSV Log", csv, "gps_log.csv", "text/csv")
 else:
     st.info("📡 Waiting for first GPS fix...")
+
 
 
 
