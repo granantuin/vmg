@@ -67,7 +67,7 @@ html_code = f"""
 let tracking = {str(st.session_state.tracking).lower()};
 let lastPos = null;
 let lastTime = null;
-const MOVE_THRESHOLD = 5;  // meters
+const MOVE_THRESHOLD = 15;  // meters
 const waypoint = {{lat: {wp_lat}, lon: {wp_lon}}};  // target waypoint
 
 function haversine(lat1, lon1, lat2, lon2) {{
@@ -221,6 +221,7 @@ if len(st.session_state.data) > 0:
     st.download_button("💾 Download CSV Log", csv, "gps_log.csv", "text/csv")
 else:
     st.info("📡 Waiting for GPS fix...")
+
 
 
 
