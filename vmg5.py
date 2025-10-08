@@ -101,10 +101,10 @@ function startTracking() {{
 
       output.innerHTML = `
         <b>${{time.toLocaleTimeString()}}</b><br>
-        Lat: ${{lat.toFixed(6)}} | Lon: ${{lon.toFixed(6)}} | ±${{acc.toFixed(1)}} m<br>
-        Speed: ${{speedKn.toFixed(2)}} kn | Course: ${{hdg ? hdg.toFixed(1) : "—"}}°<br>
-        Bearing→WP: ${{bearingWP.toFixed(1)}}° | VMG: ${{vmg.toFixed(2)}} kn | ETA: ${{etaMin}} min<br>
-        🧭 Virtual Course: ${{virtualCourse.toFixed(1)}}° | VMGvirtual: ${{vmgVirtual.toFixed(2)}} kn | ETAvirtual: ${{etaVirtual}} min
+        Lat: ${{lat.toFixed(4)}} | Lon: ${{lon.toFixed(4)}} | ±${{acc.toFixed(1)}} m<br>
+        Speed: ${{speedKn.toFixed(1)}} kn | Course: ${{hdg ? hdg.toFixed(0) : "—"}}°<br>
+        Bearing→WP: ${{bearingWP.toFixed(0)}}° | VMG: ${{vmg.toFixed(1)}} kn | ETA: ${{etaMin}} min<br>
+        🧭 Virtual Course: ${{virtualCourse.toFixed(0)}}° | VMGvirtual: ${{vmgVirtual.toFixed(1)}} kn | ETAvirtual: ${{etaVirtual}} min
       `;
     }},
     (err) => {{
@@ -131,6 +131,7 @@ function stopTracking() {{
 """
 
 st.components.v1.html(gps_script, height=350)
+
 
 
 
