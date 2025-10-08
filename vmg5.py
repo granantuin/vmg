@@ -15,7 +15,7 @@ waypoints = {
     "Moscardiño": (42.5934, -8.8743),
     "Aurora": (42.6021, -8.8064),
     "Ostreira": (42.5946, -8.9134),
-    "Capitán": (42.5185, -8.9799),
+    "Castro": (42.5185, -8.9799),
 }
 
 # --- Waypoint selector ---
@@ -131,6 +131,7 @@ function stopTracking() {{
 """
 
 st.components.v1.html(gps_script, height=350)
+
 
 
 
