@@ -1,18 +1,18 @@
 # ======================================
-# 📡 Real-Time GPS Tracker – Ría Arousa
+# 📡 Real-Time GPS Tracker – Ría Arousa (Virtual Course)
 # ======================================
 
 import streamlit as st
 import pandas as pd
 import streamlit.components.v1 as components
 
-st.set_page_config(page_title="📡 Ría Arousa GPS Tracker", layout="centered")
-st.title("📡 Real-Time GPS Tracker – Ría Arousa")
+st.set_page_config(page_title="📡 GPS Tracker + Virtual Course", layout="centered")
+st.title("📡 Real-Time GPS Tracker – Virtual Course")
 
 st.markdown("""
-This app records your live GPS position and computes:
-- **Speed (knots)**, **Course (°)**, **Bearing to waypoint**, **VMG**, **ETA (min)**
-- Updates only when movement > 5 m and accuracy ≤ 30 m.
+Tracks your live GPS position and calculates:
+- **Speed**, **Course**, **Bearing to waypoint**, **VMG**, **ETA**
+- Adds a **Virtual Course** ±100° from actual heading, and computes **VMGvirtual** & **ETAvirtual**
 """)
 
 # --- Waypoints ---
@@ -45,7 +45,7 @@ with col2:
     if st.button("⏹ Stop Tracking"):
         st.session_state.tracking = False
 
-# --- Status display ---
+# --- Status ---
 if st.session_state.tracking:
     st.success("✅ Tracking active — receiving GPS data...")
 else:
@@ -108,6 +108,8 @@ function startTracking() {{
     }}
 
     let speedKn = 0, course = 0, vmg = 0, etaMin = "∞";
+    let vmgVirtual = 0, etaVirtual = "∞", courseVirtual = 0;
+
     let bearingWP = bearingTo(lat, lon, waypoint.lat, waypoint.lon);
     let distToWP = haversine(lat, lon, waypoint.lat, waypoint.lon);
 
@@ -117,9 +119,24 @@ function startTracking() {{
       if (dist >= MOVE_THRESHOLD && dt > 0) {{
         speedKn = (dist / dt) * 1.94384;
         course = bearingTo(lastPos.lat, lastPos.lon, lat, lon);
+
+        // --- VMG & ETA (actual) ---
         const angleDiff = Math.abs(course - bearingWP);
         vmg = speedKn * Math.cos(angleDiff * Math.PI / 180);
         etaMin = (vmg > 0.1) ? (distToWP / (vmg * 0.5144) / 60).toFixed(1) : "∞";
+
+        // --- Virtual Course logic ---
+        const left = (course - 100 + 360) % 360;
+        const right = (course + 100) % 360;
+        const diffL = Math.abs(((bearingWP - left + 540) % 360) - 180);
+        const diffR = Math.abs(((bearingWP - right + 540) % 360) - 180);
+        courseVirtual = (diffL < diffR) ? left : right;
+
+        const angleDiffVirtual = Math.abs(courseVirtual - bearingWP);
+        vmgVirtual = speedKn * Math.cos(angleDiffVirtual * Math.PI / 180);
+        etaVirtual = (vmgVirtual > 0.1)
+          ? (distToWP / (vmgVirtual * 0.5144) / 60).toFixed(1)
+          : "∞";
       }}
     }}
 
@@ -127,13 +144,14 @@ function startTracking() {{
       <b>${{time.toLocaleTimeString()}}</b><br>
       Lat: ${{lat.toFixed(6)}} | Lon: ${{lon.toFixed(6)}} | ±${{acc.toFixed(1)}} m<br>
       Speed: ${{speedKn.toFixed(2)}} kn | Course: ${{course.toFixed(1)}}°<br>
-      Bearing→{selected_wp}: ${{bearingWP.toFixed(1)}}° | VMG: ${{vmg.toFixed(2)}} kn<br>
-      ETA: ${{etaMin}} min
+      Bearing→{selected_wp}: ${{bearingWP.toFixed(1)}}° | VMG: ${{vmg.toFixed(2)}} kn | ETA: ${{etaMin}} min<br>
+      🧭 Virtual course: ${{courseVirtual.toFixed(1)}}° | VMGv: ${{vmgVirtual.toFixed(2)}} kn | ETAv: ${{etaVirtual}} min
     `;
 
     window.parent.postMessage({{
       lat, lon, acc, time: time.toISOString(),
-      speedKn, course, bearingWP, vmg, eta: etaMin
+      speedKn, course, bearingWP, vmg, etaMin,
+      courseVirtual, vmgVirtual, etaVirtual
     }}, "*");
 
     lastPos = {{lat, lon}};
@@ -162,9 +180,9 @@ else stopTracking();
 </script>
 """
 
-components.html(html_code, height=280)
+components.html(html_code, height=300)
 
-# --- Receive updates ---
+# --- Handle updates ---
 params = st.query_params
 if "lat" in params:
     lat = float(params["lat"][0])
@@ -175,7 +193,11 @@ if "lat" in params:
     course = float(params.get("course", [0])[0])
     bearing = float(params.get("bearingWP", [0])[0])
     vmg = float(params.get("vmg", [0])[0])
-    eta = params.get("eta", ["—"])[0]
+    eta = params.get("etaMin", ["—"])[0]
+    course_virtual = float(params.get("courseVirtual", [0])[0])
+    vmg_virtual = float(params.get("vmgVirtual", [0])[0])
+    eta_virtual = params.get("etaVirtual", ["—"])[0]
+
     st.session_state.data.append({
         "time": time,
         "lat": lat,
@@ -185,7 +207,10 @@ if "lat" in params:
         "course_deg": round(course, 1),
         "bearing_deg": round(bearing, 1),
         "vmg_kn": round(vmg, 2),
-        "eta_min": eta
+        "eta_min": eta,
+        "course_virtual": round(course_virtual, 1),
+        "vmg_virtual": round(vmg_virtual, 2),
+        "eta_virtual": eta_virtual
     })
 
 # --- Show table ---
