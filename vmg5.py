@@ -1,6 +1,5 @@
 # ==============================
-# 📡 Real-Time GPS Tracker (Streamlit)
-# Always shows position/time — only computes motion when real movement
+# 📡 Real-Time GPS Tracker – Ría Arousa (with Start/Stop toggle)
 # ==============================
 
 import streamlit as st
@@ -11,10 +10,10 @@ st.set_page_config(page_title="📡 Ría Arousa GPS Tracker", layout="centered")
 st.title("📡 Real-Time GPS Tracker – Ría Arousa")
 
 st.markdown("""
-This app records your live GPS position and shows:
-- **Lat/Lon**, **Time**, **Accuracy**
-- **Speed (knots)**, **Course (°)**, **Bearing**, **VMG**, **ETA**
-- Updates motion data only when you actually move (filters out GPS noise)
+This app records your live GPS position and computes:
+- **Speed (knots)**, **Course (°)**, **Bearing to waypoint**, **VMG**, **ETA**
+- Filters small jitter: updates only when movement > 5 m
+- High accuracy mode (±30 m or better)
 """)
 
 # --- Waypoints ---
@@ -32,11 +31,25 @@ waypoints = {
 selected_wp = st.selectbox("🎯 Select waypoint", list(waypoints.keys()))
 wp_lat, wp_lon = waypoints[selected_wp]
 
-# --- Data storage ---
+# --- Session state ---
+if "tracking" not in st.session_state:
+    st.session_state.tracking = False
 if "data" not in st.session_state:
     st.session_state.data = []
 
-# --- JavaScript for GPS tracking ---
+# --- Toggle button ---
+if st.button("▶️ Start Tracking" if not st.session_state.tracking else "⏹ Stop Tracking"):
+    st.session_state.tracking = not st.session_state.tracking
+
+# --- Start tracking ---
+if st.session_state.tracking:
+    st.success("✅ Tracking active — receiving GPS data...")
+    tracking_status = "start"
+else:
+    st.warning("⏹ Tracking stopped. Tap ▶️ to start.")
+    tracking_status = "stop"
+
+# --- JavaScript GPS logic ---
 html_code = f"""
 <div id="gps-output" style="
   font-family: monospace;
@@ -49,11 +62,12 @@ html_code = f"""
 </div>
 
 <script>
+let tracking = {str(st.session_state.tracking).lower()};
 let lastPos = null;
 let lastTime = null;
-const MOVE_THRESHOLD = 5; // meters — minimum to consider real movement
+const MOVE_THRESHOLD = 5;  // meters
+const waypoint = {{lat: {wp_lat}, lon: {wp_lon}}}  // target waypoint
 
-// --- Haversine (m) ---
 function haversine(lat1, lon1, lat2, lon2) {{
   const R = 6371000;
   const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -64,7 +78,6 @@ function haversine(lat1, lon1, lat2, lon2) {{
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }}
 
-// --- Bearing (°) ---
 function bearingTo(lat1, lon1, lat2, lon2) {{
   const y = Math.sin((lon2 - lon1) * Math.PI/180) * Math.cos(lat2 * Math.PI/180);
   const x = Math.cos(lat1 * Math.PI/180) * Math.sin(lat2 * Math.PI/180) -
@@ -73,66 +86,81 @@ function bearingTo(lat1, lon1, lat2, lon2) {{
   return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
 }}
 
-const waypoint = {{lat: {wp_lat}, lon: {wp_lon}}};
+let watchId = null;
 
-navigator.geolocation.watchPosition((pos) => {{
-  const lat = pos.coords.latitude;
-  const lon = pos.coords.longitude;
-  const acc = pos.coords.accuracy;
-  const time = new Date();
-
-  if (acc > 30) {{
-    document.getElementById("gps-output").innerHTML = "📡 Waiting for accurate fix (±" + acc.toFixed(1) + " m)";
+function startTracking() {{
+  if (!navigator.geolocation) {{
+    document.getElementById("gps-output").innerHTML = "❌ Geolocation not supported.";
     return;
   }}
+  watchId = navigator.geolocation.watchPosition((pos) => {{
+    const lat = pos.coords.latitude;
+    const lon = pos.coords.longitude;
+    const acc = pos.coords.accuracy;
+    const time = new Date();
 
-  let speedKn = 0;
-  let course = 0;
-  let bearingWP = bearingTo(lat, lon, waypoint.lat, waypoint.lon);
-  let distToWP = haversine(lat, lon, waypoint.lat, waypoint.lon);
-  let vmg = 0;
-  let etaMin = "∞";
-
-  if (lastPos) {{
-    const dist = haversine(lastPos.lat, lastPos.lon, lat, lon);
-    const dt = (time - lastTime) / 1000;
-
-    if (dist >= MOVE_THRESHOLD && dt > 0) {{
-      speedKn = (dist / dt) * 1.94384; // knots
-      course = bearingTo(lastPos.lat, lastPos.lon, lat, lon);
-      const angleDiff = Math.abs(course - bearingWP);
-      vmg = speedKn * Math.cos(angleDiff * Math.PI / 180);
-      etaMin = (vmg > 0.1) ? (distToWP / (vmg * 0.5144) / 60).toFixed(1) : "∞";
+    if (acc > 30) {{
+      document.getElementById("gps-output").innerHTML =
+        "📡 Waiting for accurate fix (±" + acc.toFixed(1) + " m)";
+      return;
     }}
+
+    let speedKn = 0, course = 0, vmg = 0, etaMin = "∞";
+    let bearingWP = bearingTo(lat, lon, waypoint.lat, waypoint.lon);
+    let distToWP = haversine(lat, lon, waypoint.lat, waypoint.lon);
+
+    if (lastPos) {{
+      const dist = haversine(lastPos.lat, lastPos.lon, lat, lon);
+      const dt = (time - lastTime) / 1000;
+      if (dist >= MOVE_THRESHOLD && dt > 0) {{
+        speedKn = (dist / dt) * 1.94384;
+        course = bearingTo(lastPos.lat, lastPos.lon, lat, lon);
+        const angleDiff = Math.abs(course - bearingWP);
+        vmg = speedKn * Math.cos(angleDiff * Math.PI / 180);
+        etaMin = (vmg > 0.1) ? (distToWP / (vmg * 0.5144) / 60).toFixed(1) : "∞";
+      }}
+    }}
+
+    document.getElementById("gps-output").innerHTML = `
+      <b>${{time.toLocaleTimeString()}}</b><br>
+      Lat: ${{lat.toFixed(6)}} | Lon: ${{lon.toFixed(6)}} | ±${{acc.toFixed(1)}} m<br>
+      Speed: ${{speedKn.toFixed(2)}} kn | Course: ${{course.toFixed(1)}}°<br>
+      Bearing→{selected_wp}: ${{bearingWP.toFixed(1)}}° | VMG: ${{vmg.toFixed(2)}} kn<br>
+      ETA: ${{etaMin}} min
+    `;
+
+    window.parent.postMessage({{
+      lat, lon, acc, time: time.toISOString(),
+      speedKn, course, bearingWP, vmg, eta: etaMin
+    }}, "*");
+
+    lastPos = {{lat, lon}};
+    lastTime = time;
+  }},
+  (err) => {{
+    document.getElementById("gps-output").innerHTML = "❌ " + err.message;
+  }},
+  {{
+    enableHighAccuracy: true,
+    maximumAge: 0,
+    timeout: 10000
+  }});
+}}
+
+function stopTracking() {{
+  if (watchId) {{
+    navigator.geolocation.clearWatch(watchId);
+    watchId = null;
+    document.getElementById("gps-output").innerHTML = "<b>Tracking stopped.</b>";
   }}
+}}
 
-  document.getElementById("gps-output").innerHTML = `
-    <b>${{time.toLocaleTimeString()}}</b><br>
-    Lat: ${{lat.toFixed(6)}} | Lon: ${{lon.toFixed(6)}} | ±${{acc.toFixed(1)}} m<br>
-    Speed: ${{speedKn.toFixed(2)}} kn | Course: ${{course.toFixed(1)}}°<br>
-    Bearing→{selected_wp}: ${{bearingWP.toFixed(1)}}° | VMG: ${{vmg.toFixed(2)}} kn<br>
-    ETA: ${{etaMin}} min
-  `;
-
-  window.parent.postMessage({{
-    lat, lon, acc, time: time.toISOString(),
-    speedKn, course, bearingWP, vmg, eta: etaMin
-  }}, "*");
-
-  lastPos = {{lat, lon}};
-  lastTime = time;
-
-}}, err => {{
-  document.getElementById("gps-output").innerHTML = "❌ " + err.message;
-}}, {{
-  enableHighAccuracy: true,
-  maximumAge: 0,
-  timeout: 10000
-}});
+if (tracking) startTracking();
+else stopTracking();
 </script>
 """
 
-components.html(html_code, height=250)
+components.html(html_code, height=270)
 
 # --- Receive updates ---
 params = st.query_params
@@ -165,7 +193,8 @@ if len(st.session_state.data) > 0:
     csv = df.to_csv(index=False).encode("utf-8")
     st.download_button("💾 Download CSV Log", csv, "gps_log.csv", "text/csv")
 else:
-    st.info("📡 Waiting for first accurate GPS fix...")
+    st.info("📡 Waiting for first GPS fix...")
+
 
 
 
