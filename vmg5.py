@@ -68,7 +68,7 @@ function startTracking() {{
     return;
   }}
 
-  const MIN_MOVE_DIST = 5;  // meters — ignore smaller movements
+  const MIN_MOVE_DIST = 10;  // meters — ignore smaller movements
   const MAX_JUMP_DIST = 200; // meters — ignore large GPS jumps
   let lastPos = null;
   
@@ -163,6 +163,7 @@ function stopTracking() {{
 """
 
 st.components.v1.html(gps_script, height=350)
+
 
 
 
