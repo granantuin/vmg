@@ -89,22 +89,34 @@ function startTracking() {{
       const vmg = speedKn * Math.cos(angle * Math.PI / 180);
       const etaMin = vmg > 0.1 ? (distWP / (vmg * 0.5144) / 60).toFixed(1) : "∞";
 
-      const coursePlus = (hdg + 100) % 360;
-      const courseMinus = (hdg - 100 + 360) % 360;
-      const diffPlus = angleDiff(coursePlus, bearingWP);
-      const diffMinus = angleDiff(courseMinus, bearingWP);
-      const virtualCourse = (diffPlus < diffMinus) ? coursePlus : courseMinus;
+      const coursePlus100 = (hdg + 100) % 360;
+      const courseMinus100 = (hdg - 100 + 360) % 360;
+      const diffPlus100 = angleDiff(coursePlus100, bearingWP);
+      const diffMinus100 = angleDiff(courseMinus100, bearingWP);
+      const virtualCourse100 = (diffPlus100 < diffMinus100) ? coursePlus100 : courseMinus100;
 
-      const angleVirt = angleDiff(virtualCourse, bearingWP);
-      const vmgVirtual = speedKn * Math.cos(angleVirt * Math.PI / 180);
-      const etaVirtual = vmgVirtual > 0.1 ? (distWP / (vmgVirtual * 0.5144) / 60).toFixed(1) : "∞";
+      const angleVirt100 = angleDiff(virtualCourse100, bearingWP);
+      const vmgVirtual100 = speedKn * Math.cos(angleVirt100 * Math.PI / 180);
+      const etaVirtual100 = vmgVirtual100 > 0.1 ? (distWP / (vmgVirtual100 * 0.5144) / 60).toFixed(1) : "∞";
+
+      const coursePlus90 = (hdg + 90) % 360;
+      const courseMinus90 = (hdg - 90 + 360) % 360;
+      const diffPlus90 = angleDiff(coursePlus90, bearingWP);
+      const diffMinus90 = angleDiff(courseMinus90, bearingWP);
+      const virtualCourse90 = (diffPlus90 < diffMinus90) ? coursePlus90 : courseMinus90;
+
+      const angleVirt90 = angleDiff(virtualCourse90, bearingWP);
+      const vmgVirtual90 = speedKn * Math.cos(angleVirt90 * Math.PI / 180);
+      const etaVirtual90 = vmgVirtual90 > 0.1 ? (distWP / (vmgVirtual90 * 0.5144) / 60).toFixed(1) : "∞";
+
 
       output.innerHTML = `
         <b>${{time.toLocaleTimeString()}}</b><br>
         Lat: ${{lat.toFixed(4)}} | Lon: ${{lon.toFixed(4)}} | ±${{acc.toFixed(1)}} m<br>
         Speed: ${{speedKn.toFixed(1)}} kn | Course: ${{hdg ? hdg.toFixed(0) : "—"}}°<br>
         Bearing→WP: ${{bearingWP.toFixed(0)}}° | VMG: ${{vmg.toFixed(1)}} kn | ETA: ${{etaMin}} min<br>
-        🧭 Virtual Course: ${{virtualCourse.toFixed(0)}}° | VMGvirtual: ${{vmgVirtual.toFixed(1)}} kn | ETAvirtual: ${{etaVirtual}} min
+        🧭 Virtual Course100: ${{virtualCourse100.toFixed(0)}}° | VMGvirtual100: ${{vmgVirtual100.toFixed(1)}} kn | ETAvirtual100: ${{etaVirtual100}} min<br>
+        🧭 Virtual Course90: ${{virtualCourse90.toFixed(0)}}° | VMGvirtual90: ${{vmgVirtual90.toFixed(1)}} kn | ETAvirtual90: ${{etaVirtual90}} min
       `;
     }},
     (err) => {{
@@ -131,6 +143,7 @@ function stopTracking() {{
 """
 
 st.components.v1.html(gps_script, height=350)
+
 
 
 
