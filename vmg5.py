@@ -3,7 +3,7 @@ import pandas as pd
 
 st.set_page_config(page_title="VMG Tracker", layout="centered")
 
-st.title("🧭 Real-Time VMG & Virtual Course Tracker. FANPI project")
+st.title("🧭 Real-Time VMG & Virtual Course Tracker — FANPI Project")
 
 # --- Waypoints ---
 waypoints = {
@@ -23,12 +23,10 @@ wp_name = st.selectbox("Select Waypoint", list(waypoints.keys()))
 wp_lat, wp_lon = waypoints[wp_name]
 st.write(f"📍 Waypoint: **{wp_name}** — {wp_lat:.5f}, {wp_lon:.5f}")
 
-
 # --- HTML container for JS output ---
 st.markdown("### Live GPS Data")
-gps_output = st.empty()
 
-# --- Inject JavaScript ---
+# --- Inject JavaScript safely ---
 gps_script = f"""
 <script>
 const ACC_THRESHOLD = 20; // meters
@@ -60,21 +58,21 @@ function angleDiff(a, b) {{
   return d > 180 ? 360 - d : d;
 }}
 
-function startTracking() {
+function startTracking() {{
   const output = document.getElementById("gps-output");
   output.innerHTML = "📡 Waiting for GPS signal...";
 
-  if (!navigator.geolocation) {
+  if (!navigator.geolocation) {{
     output.innerHTML = "❌ Geolocation not supported.";
     return;
-  }
+  }}
 
-  const MIN_MOVE_DIST = 15;  // meters — ignore smaller movements (was 10)
+  const MIN_MOVE_DIST = 15;  // meters — ignore smaller movements
   const MAX_JUMP_DIST = 200; // meters — ignore large GPS jumps
   let lastPos = null;
-  
+
   watchId = navigator.geolocation.watchPosition(
-    (pos) => {
+    (pos) => {{
       const lat = pos.coords.latitude;
       const lon = pos.coords.longitude;
       const acc = pos.coords.accuracy;
@@ -82,27 +80,28 @@ function startTracking() {
       const hdg = pos.coords.heading;
       const time = new Date();
 
-      if (acc > ACC_THRESHOLD) {
-        output.innerHTML = `⏳ Waiting for accurate fix (±${acc.toFixed(1)} m)...`;
+      if (acc > ACC_THRESHOLD) {{
+        output.innerHTML = `⏳ Waiting for accurate fix (±${{acc.toFixed(1)}} m)...`;
         return;
-      }
+      }}
 
       // Reject noisy GPS updates
-      if (lastPos) {
+      if (lastPos) {{
         const distSinceLast = haversine(lat, lon, lastPos.lat, lastPos.lon);
-        if (distSinceLast < MIN_MOVE_DIST) {
+        if (distSinceLast < MIN_MOVE_DIST) {{
           // Too small — likely GPS jitter
           return;
-        }
-        if (distSinceLast > MAX_JUMP_DIST) {
+        }}
+        if (distSinceLast > MAX_JUMP_DIST) {{
           // Too large — likely GPS glitch
           console.warn("⚠️ Ignored unrealistic GPS jump:", distSinceLast, "m");
           return;
-        }
-      }
+        }}
+      }}
 
-      lastPos = { lat, lon };
-  
+      // Update last position after valid move
+      lastPos = {{ lat, lon }};
+
       const speedKn = spd ? (spd * 1.94384) : 0;
       const bearingWP = bearingTo(lat, lon, waypoint.lat, waypoint.lon);
       const distWP = haversine(lat, lon, waypoint.lat, waypoint.lon);
@@ -131,21 +130,20 @@ function startTracking() {
       const etaVirtual90 = vmgVirtual90 > 0.1 ? (distWP / (vmgVirtual90 * 0.5144) / 60).toFixed(1) : "∞";
 
       output.innerHTML = `
-        <b>${time.toLocaleTimeString()}</b><br>
-        Lat: ${lat.toFixed(4)} | Lon: ${lon.toFixed(4)} | ±${acc.toFixed(1)} m<br>
-        Speed: ${speedKn.toFixed(1)} kn | Course: ${hdg ? hdg.toFixed(0) : "—"}°<br>
-        Bearing→WP: ${bearingWP.toFixed(0)}° | VMG: ${vmg.toFixed(1)} kn | ETA: ${etaMin} min<br>
-        🧭 Virtual Course100: ${virtualCourse100.toFixed(0)}° | VMGvirtual100: ${vmgVirtual100.toFixed(1)} kn | ETAvirtual100: ${etaVirtual100} min<br>
-        🧭 Virtual Course90: ${virtualCourse90.toFixed(0)}° | VMGvirtual90: ${vmgVirtual90.toFixed(1)} kn | ETAvirtual90: ${etaVirtual90} min
+        <b>${{time.toLocaleTimeString()}}</b><br>
+        Lat: ${{lat.toFixed(4)}} | Lon: ${{lon.toFixed(4)}} | ±${{acc.toFixed(1)}} m<br>
+        Speed: ${{speedKn.toFixed(1)}} kn | Course: ${{hdg ? hdg.toFixed(0) : "—"}}°<br>
+        Bearing→WP: ${{bearingWP.toFixed(0)}}° | VMG: ${{vmg.toFixed(1)}} kn | ETA: ${{etaMin}} min<br>
+        🧭 Virtual Course100: ${{virtualCourse100.toFixed(0)}}° | VMGvirtual100: ${{vmgVirtual100.toFixed(1)}} kn | ETAvirtual100: ${{etaVirtual100}} min<br>
+        🧭 Virtual Course90: ${{virtualCourse90.toFixed(0)}}° | VMGvirtual90: ${{vmgVirtual90.toFixed(1)}} kn | ETAvirtual90: ${{etaVirtual90}} min
       `;
-    },
-    (err) => {
+    }},
+    (err) => {{
       output.innerHTML = "❌ " + err.message;
-    },
-    { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
+    }},
+    {{ enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }}
   );
-}
-
+}}
 
 function stopTracking() {{
   if (watchId !== null) {{
@@ -163,7 +161,8 @@ function stopTracking() {{
 </div>
 """
 
-st.components.v1.html(gps_script, height=350)
+st.components.v1.html(gps_script, height=400)
+
 
 
 
