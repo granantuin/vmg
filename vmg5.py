@@ -161,7 +161,8 @@ function stopTracking() {{
 </div>
 """
 
-st.components.v1.html(gps_script, height=400)
+st.components.v1.html(gps_script, height=600)
+
 
 
 
