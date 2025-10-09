@@ -68,6 +68,10 @@ function startTracking() {{
     return;
   }}
 
+  const MIN_MOVE_DIST = 5;  // meters — ignore smaller movements
+  const MAX_JUMP_DIST = 200; // meters — ignore large GPS jumps
+  let lastPos = null;
+  
   watchId = navigator.geolocation.watchPosition(
     (pos) => {{
       const lat = pos.coords.latitude;
@@ -82,6 +86,22 @@ function startTracking() {{
         return;
       }}
 
+      // Reject noisy GPS updates
+      if (lastPos) {
+        const distSinceLast = haversine(lat, lon, lastPos.lat, lastPos.lon);
+        if (distSinceLast < MIN_MOVE_DIST) {
+          // Too small — likely GPS jitter
+          return;
+        }
+        if (distSinceLast > MAX_JUMP_DIST) {
+          // Too large — likely GPS glitch
+          console.warn("⚠️ Ignored unrealistic GPS jump:", distSinceLast, "m");
+          return;
+        }
+      }
+
+      lastPos = { lat, lon };
+  
       const speedKn = spd ? (spd * 1.94384) : 0;
       const bearingWP = bearingTo(lat, lon, waypoint.lat, waypoint.lon);
       const distWP = haversine(lat, lon, waypoint.lat, waypoint.lon);
@@ -143,6 +163,7 @@ function stopTracking() {{
 """
 
 st.components.v1.html(gps_script, height=350)
+
 
 
 
