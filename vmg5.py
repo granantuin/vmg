@@ -3,7 +3,7 @@ import pandas as pd
 
 st.set_page_config(page_title="VMG Tracker", layout="centered")
 
-st.title("🧭 Real-Time VMG & Virtual Course Tracker — FANPI Project")
+st.title("🧭 Real-Time VMG & Virtual Course— FANPI Project")
 
 # --- Waypoints ---
 waypoints = {
@@ -162,6 +162,7 @@ function stopTracking() {{
 """
 
 st.components.v1.html(gps_script, height=600)
+
 
 
 
