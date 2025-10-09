@@ -24,7 +24,7 @@ wp_lat, wp_lon = waypoints[wp_name]
 st.write(f"📍 Waypoint: **{wp_name}** — {wp_lat:.5f}, {wp_lon:.5f}")
 
 # --- HTML container for JS output ---
-st.markdown("### Live GPS Data")
+#st.markdown("### Live GPS Data")
 
 # --- Inject JavaScript safely ---
 gps_script = f"""
@@ -162,6 +162,7 @@ function stopTracking() {{
 """
 
 st.components.v1.html(gps_script, height=600)
+
 
 
 
