@@ -60,20 +60,21 @@ function angleDiff(a, b) {{
   return d > 180 ? 360 - d : d;
 }}
 
-function startTracking() {{
+function startTracking() {
   const output = document.getElementById("gps-output");
   output.innerHTML = "📡 Waiting for GPS signal...";
-  if (!navigator.geolocation) {{
+
+  if (!navigator.geolocation) {
     output.innerHTML = "❌ Geolocation not supported.";
     return;
-  }}
+  }
 
-  const MIN_MOVE_DIST = 10;  // meters — ignore smaller movements
+  const MIN_MOVE_DIST = 15;  // meters — ignore smaller movements (was 10)
   const MAX_JUMP_DIST = 200; // meters — ignore large GPS jumps
   let lastPos = null;
   
   watchId = navigator.geolocation.watchPosition(
-    (pos) => {{
+    (pos) => {
       const lat = pos.coords.latitude;
       const lon = pos.coords.longitude;
       const acc = pos.coords.accuracy;
@@ -81,10 +82,10 @@ function startTracking() {{
       const hdg = pos.coords.heading;
       const time = new Date();
 
-      if (acc > ACC_THRESHOLD) {{
-        output.innerHTML = `⏳ Waiting for accurate fix (±${{acc.toFixed(1)}} m)...`;
+      if (acc > ACC_THRESHOLD) {
+        output.innerHTML = `⏳ Waiting for accurate fix (±${acc.toFixed(1)} m)...`;
         return;
-      }}
+      }
 
       // Reject noisy GPS updates
       if (lastPos) {
@@ -129,22 +130,22 @@ function startTracking() {{
       const vmgVirtual90 = speedKn * Math.cos(angleVirt90 * Math.PI / 180);
       const etaVirtual90 = vmgVirtual90 > 0.1 ? (distWP / (vmgVirtual90 * 0.5144) / 60).toFixed(1) : "∞";
 
-
       output.innerHTML = `
-        <b>${{time.toLocaleTimeString()}}</b><br>
-        Lat: ${{lat.toFixed(4)}} | Lon: ${{lon.toFixed(4)}} | ±${{acc.toFixed(1)}} m<br>
-        Speed: ${{speedKn.toFixed(1)}} kn | Course: ${{hdg ? hdg.toFixed(0) : "—"}}°<br>
-        Bearing→WP: ${{bearingWP.toFixed(0)}}° | VMG: ${{vmg.toFixed(1)}} kn | ETA: ${{etaMin}} min<br>
-        🧭 Virtual Course100: ${{virtualCourse100.toFixed(0)}}° | VMGvirtual100: ${{vmgVirtual100.toFixed(1)}} kn | ETAvirtual100: ${{etaVirtual100}} min<br>
-        🧭 Virtual Course90: ${{virtualCourse90.toFixed(0)}}° | VMGvirtual90: ${{vmgVirtual90.toFixed(1)}} kn | ETAvirtual90: ${{etaVirtual90}} min
+        <b>${time.toLocaleTimeString()}</b><br>
+        Lat: ${lat.toFixed(4)} | Lon: ${lon.toFixed(4)} | ±${acc.toFixed(1)} m<br>
+        Speed: ${speedKn.toFixed(1)} kn | Course: ${hdg ? hdg.toFixed(0) : "—"}°<br>
+        Bearing→WP: ${bearingWP.toFixed(0)}° | VMG: ${vmg.toFixed(1)} kn | ETA: ${etaMin} min<br>
+        🧭 Virtual Course100: ${virtualCourse100.toFixed(0)}° | VMGvirtual100: ${vmgVirtual100.toFixed(1)} kn | ETAvirtual100: ${etaVirtual100} min<br>
+        🧭 Virtual Course90: ${virtualCourse90.toFixed(0)}° | VMGvirtual90: ${vmgVirtual90.toFixed(1)} kn | ETAvirtual90: ${etaVirtual90} min
       `;
-    }},
-    (err) => {{
+    },
+    (err) => {
       output.innerHTML = "❌ " + err.message;
-    }},
-    {{ enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }}
+    },
+    { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
   );
-}}
+}
+
 
 function stopTracking() {{
   if (watchId !== null) {{
@@ -163,6 +164,7 @@ function stopTracking() {{
 """
 
 st.components.v1.html(gps_script, height=350)
+
 
 
 
