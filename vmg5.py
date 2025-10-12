@@ -3,7 +3,7 @@ import pandas as pd
 
 st.set_page_config(page_title="VMG Tracker", layout="centered")
 
-st.title("🧭 Proyecto FANPI")
+st.title("🧭FANPI")
 
 # --- Waypoints ---
 waypoints = {
@@ -19,7 +19,7 @@ waypoints = {
 }
 
 # --- Waypoint selector ---
-wp_name = st.selectbox("Selecionart Waypoint", list(waypoints.keys()))
+wp_name = st.selectbox("Selecionar Waypoint", list(waypoints.keys()))
 wp_lat, wp_lon = waypoints[wp_name]
 
 
@@ -160,6 +160,7 @@ function stopTracking() {{
 """
 
 st.components.v1.html(gps_script, height=600)
+
 
 
 
