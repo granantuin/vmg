@@ -19,9 +19,9 @@ waypoints = {
 }
 
 # --- Waypoint selector ---
-wp_name = st.selectbox("Select Waypoint", list(waypoints.keys()))
+wp_name = st.selectbox("Selecionart Waypoint", list(waypoints.keys()))
 wp_lat, wp_lon = waypoints[wp_name]
-st.write(f"📍 Waypoint: **{wp_name}** — {wp_lat:.5f}, {wp_lon:.5f}")
+
 
 # --- HTML container for JS output ---
 #st.markdown("### Live GPS Data")
@@ -131,11 +131,9 @@ function startTracking() {{
 
       output.innerHTML = `
         <b>${{time.toLocaleTimeString()}}</b><br>
-        //Lat: ${{lat.toFixed(4)}} | Lon: ${{lon.toFixed(4)}} | ±${{acc.toFixed(1)}} m<br>
-        Velocidad: ${{speedKn.toFixed(1)}} kn | Rumbo Real: ${{hdg ? hdg.toFixed(0) : "—"}}°<br>
-        Rumbo al waypoint: ${{bearingWP.toFixed(0)}}°| Tiempo para llegar al waypoint: ${{etaMin}} min<br>
-        🧭 Virtual Course100: ${{virtualCourse100.toFixed(0)}}° | VMGvirtual100: ${{vmgVirtual100.toFixed(1)}} kn | ETAvirtual100: ${{etaVirtual100}} min<br>
-        🧭 Virtual Course90: ${{virtualCourse90.toFixed(0)}}° | VMGvirtual90: ${{vmgVirtual90.toFixed(1)}} kn | ETAvirtual90: ${{etaVirtual90}} min
+        Rumbo Real: ${{hdg ? hdg.toFixed(0) : "—"}}°| Velocidad: ${{speedKn.toFixed(1)}} kn  <br>
+        Rumbo para ir al waypoint: ${{bearingWP.toFixed(0)}}°| Tiempo para llegar al waypoint con rumbo actual: ${{etaMin}} min<br>
+        Rumbo si viramos 90 grados: ${{virtualCourse90.toFixed(0)}}° | Tiempo para llegar al waypoint con el nuevo rumbo: ${{etaVirtual90}} min
       `;
     }},
     (err) => {{
@@ -162,6 +160,7 @@ function stopTracking() {{
 """
 
 st.components.v1.html(gps_script, height=600)
+
 
 
 
