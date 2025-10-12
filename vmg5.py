@@ -132,8 +132,8 @@ function startTracking() {{
       output.innerHTML = `
         <b>${{time.toLocaleTimeString()}}</b><br>
         Rumbo Real: ${{hdg ? hdg.toFixed(0) : "—"}}°| Velocidad: ${{speedKn.toFixed(1)}} kn  <br>
-        Rumbo para ir al waypoint: ${{bearingWP.toFixed(0)}}°| Tiempo para llegar al waypoint con rumbo actual: ${{etaMin}} min<br>
-        Rumbo si viramos 90 grados: ${{virtualCourse90.toFixed(0)}}° | Tiempo para llegar al waypoint con el nuevo rumbo: ${{etaVirtual90}} min
+        Rumbo al waypoint: ${{bearingWP.toFixed(0)}}°| Tiempo al waypoint: ${{etaMin}} min<br>
+        Rumbo si viramos 90 grados: ${{virtualCourse90.toFixed(0)}}° | Tiempo al waypoint con el nuevo rumbo: ${{etaVirtual90}} min
       `;
     }},
     (err) => {{
@@ -160,6 +160,7 @@ function stopTracking() {{
 """
 
 st.components.v1.html(gps_script, height=600)
+
 
 
 
