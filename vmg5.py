@@ -3,7 +3,7 @@ import pandas as pd
 
 st.set_page_config(page_title="VMG Tracker", layout="centered")
 
-st.title("🧭 Real-Time VMG & Virtual Course— FANPI Project")
+st.title("🧭 Proyecto FANPI")
 
 # --- Waypoints ---
 waypoints = {
@@ -131,9 +131,9 @@ function startTracking() {{
 
       output.innerHTML = `
         <b>${{time.toLocaleTimeString()}}</b><br>
-        Lat: ${{lat.toFixed(4)}} | Lon: ${{lon.toFixed(4)}} | ±${{acc.toFixed(1)}} m<br>
-        Speed: ${{speedKn.toFixed(1)}} kn | Course: ${{hdg ? hdg.toFixed(0) : "—"}}°<br>
-        Bearing→WP: ${{bearingWP.toFixed(0)}}° | VMG: ${{vmg.toFixed(1)}} kn | ETA: ${{etaMin}} min<br>
+        //Lat: ${{lat.toFixed(4)}} | Lon: ${{lon.toFixed(4)}} | ±${{acc.toFixed(1)}} m<br>
+        Velocidad: ${{speedKn.toFixed(1)}} kn | Rumbo Real: ${{hdg ? hdg.toFixed(0) : "—"}}°<br>
+        Rumbo al waypoint: ${{bearingWP.toFixed(0)}}°| Tiempo para llegar al waypoint: ${{etaMin}} min<br>
         🧭 Virtual Course100: ${{virtualCourse100.toFixed(0)}}° | VMGvirtual100: ${{vmgVirtual100.toFixed(1)}} kn | ETAvirtual100: ${{etaVirtual100}} min<br>
         🧭 Virtual Course90: ${{virtualCourse90.toFixed(0)}}° | VMGvirtual90: ${{vmgVirtual90.toFixed(1)}} kn | ETAvirtual90: ${{etaVirtual90}} min
       `;
@@ -162,6 +162,7 @@ function stopTracking() {{
 """
 
 st.components.v1.html(gps_script, height=600)
+
 
 
 
