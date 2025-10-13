@@ -10,7 +10,7 @@ waypoints = {
     "Rua Norte": (42.5521, -8.9403),
     "Rua Sur": (42.5477, -8.9387),
     "Maño": (42.5701, -8.9247),
-    "Ter": (42.5737, -8.8982),
+    "Ter": (42.5735, -8.8983),
     "Seixo": (42.5855, -8.8469),
     "Moscardiño": (42.5934, -8.8743),
     "Aurora": (42.6021, -8.8064),
@@ -160,6 +160,7 @@ function stopTracking() {{
 """
 
 st.components.v1.html(gps_script, height=600)
+
 
 
 
