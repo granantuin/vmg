@@ -3,7 +3,7 @@ import pandas as pd
 
 st.set_page_config(page_title="VMG Tracker", layout="centered")
 
-st.title("🧭PIFANO")
+st.title("🧭PÍFANO")
 
 # --- Waypoints ---
 waypoints = {
